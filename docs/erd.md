@@ -1,3 +1,5 @@
+```mermaid
+
 erDiagram
 
     escolas {
@@ -81,3 +83,4 @@ erDiagram
     usuarios --o{ lotes : "cadastra"
     lotes --o{ itemLote : "contem"
     itemUniforme --o{ itemLote : "usado_em"
+```
