@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import models
 import schemas
@@ -9,19 +10,28 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="API Controle de Uniformes", version="1.0.0")
 
+# --- CONFIGURAÇÃO DE CORS ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Na fase de testes, permite qualquer origem
+    allow_credentials=True,
+    allow_methods=["*"], # Permite todos os métodos
+    allow_headers=["*"], # Permite todos os cabeçalhos
+)
+
 @app.get("/")
 def read_root():
-    return {"message": "API de Controle de Uniformes rodando"}
+    return {"message": "API de Controle de Uniformes Rodando!"}
 
 @app.get("/alunos")
 def get_alunos(db: Session = Depends(get_db)):
-    """ Retorna a lista de todos os alunos """
+    """ Retorna a lista de todos os alunos (História de Usuário: Pesquisa) """
     alunos = db.query(models.Aluno).all()
     return alunos
 
 @app.post("/entradas", status_code=201)
 def registrar_entrada(entrada: schemas.EntradaUniformeCreate, db: Session = Depends(get_db)):
-    """ Registra a entrada de novos uniformes e atualiza o estoque """
+    """ Registra a entrada de novos uniformes (Lote) e atualiza o estoque """
     try:
         # 1. Cria o registro do Lote principal
         novo_lote = models.Lote(
