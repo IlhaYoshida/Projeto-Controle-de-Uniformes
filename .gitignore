@@ -1,5 +1,42 @@
+# Dependências
+node_modules/
+
+# Build de produção
+dist/
+build/
+
+# Variáveis de ambiente e segredos
 .env
-__pycache__/
-*.pyc
-.venv/
-venv/
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Cache e cobertura de testes
+.cache/
+.vite/
+coverage/
+
+# Arquivos do editor/IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Arquivos temporários
+*.tmp
+*.temp
+~$*
