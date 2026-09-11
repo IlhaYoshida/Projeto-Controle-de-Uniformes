@@ -1,54 +1,89 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { getAlunos } from './api';
-import { demoDeliveries, demoStudents } from './data';
+import { getAlunos, createAluno, updateAluno, deleteAluno, registrarEntrega } from './api';
+import { demoStudents } from './data';
 import Layout from './components/Layout';
 import StudentsPage from './pages/StudentsPage';
 import StudentFormPage from './pages/StudentFormPage';
 import StudentDetailsPage from './pages/StudentDetailsPage';
+import EstoqueEntradaPage from './pages/EstoqueEntradaPage';
+import UniformesPage from './pages/UniformesPage';
+import RegistrarEntregaPage from './pages/RegistrarEntregaPage';
+import DashboardPage from './pages/DashboardPage';
+import RelatoriosPage from './pages/RelatoriosPage';
 
 const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
 
-function normalize(a, index) {
-  return {
-    id: a.id ?? a.aluno_id ?? index + 1,
-    nome: a.nome ?? a.nome_completo ?? 'Aluno sem nome',
-    matricula: String(a.matricula ?? ''), turma: a.turma ?? '—', idade: a.idade ?? '—',
-    nascimento: a.nascimento ?? a.data_nascimento ?? '', tamanho: a.tamanho ?? a.tamanho_camiseta ?? '—',
-    status: a.status ?? a.situacao_uniforme ?? 'Pendente', escola: a.escola ?? a.escola_nome ?? 'Escola Municipal Central',
-    pai: a.pai ?? a.nome_pai ?? '', mae: a.mae ?? a.nome_mae ?? '', recebidos: a.recebidos ?? 0,
-  };
-}
-
 export default function App() {
-  const [students, setStudents] = useState(() => JSON.parse(localStorage.getItem('uniforme_students') || 'null') || []);
-  const [deliveries, setDeliveries] = useState(() => JSON.parse(localStorage.getItem('uniforme_deliveries') || 'null') || demoDeliveries);
+  const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [apiStatus, setApiStatus] = useState('loading');
+  const [apiStatus, setApiStatus] = useState('loading'); // 'loading' | 'online' | 'offline'
 
-  useEffect(() => {
-    let active = true;
-    getAlunos().then(data => {
-      if (!active) return;
+  const carregarAlunos = useCallback(() => {
+    setLoading(true);
+    return getAlunos().then(data => {
       setApiStatus('online');
-      if (data.length) setStudents(data.map(normalize));
-      else setStudents(current => current.length ? current : demoStudents);
-    }).catch(() => { if (active) { setApiStatus('offline'); setStudents(current => current.length ? current : demoStudents); } })
-      .finally(() => active && setLoading(false));
-    return () => { active = false; };
+      setStudents(data.length ? data : []);
+    }).catch(() => {
+      setApiStatus('offline');
+      setStudents(current => current.length ? current : demoStudents);
+    }).finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { if (!loading && students.length) localStorage.setItem('uniforme_students', JSON.stringify(students)); }, [students, loading]);
-  useEffect(() => { localStorage.setItem('uniforme_deliveries', JSON.stringify(deliveries)); }, [deliveries]);
+  useEffect(() => { carregarAlunos(); }, [carregarAlunos]);
+
+  const exigirApiOnline = () => {
+    if (apiStatus !== 'online') {
+      throw new Error('A API não está respondendo agora. Verifique se o backend está no ar antes de salvar.');
+    }
+  };
 
   const value = useMemo(() => ({
-    students, deliveries, loading, apiStatus,
-    addStudent: data => setStudents(s => [...s, { ...data, id: Math.max(0, ...s.map(x => Number(x.id) || 0)) + 1, recebidos: 0 }]),
-    updateStudent: (id, data) => setStudents(s => s.map(x => String(x.id) === String(id) ? { ...x, ...data } : x)),
-    importStudents: rows => setStudents(s => [...s, ...rows.map((x, i) => normalize(x, s.length + i))]),
-    addDelivery: (id, item) => { setDeliveries(d => ({ ...d, [id]: [item, ...(d[id] || [])] })); setStudents(s => s.map(x => String(x.id) === String(id) ? { ...x, status: 'Recebido', recebidos: Number(x.recebidos || 0) + 1 } : x)); },
-  }), [students, deliveries, loading, apiStatus]);
+    students, loading, apiStatus,
+    recarregar: carregarAlunos,
 
-  return <AppContext.Provider value={value}><Routes><Route element={<Layout />}><Route index element={<Navigate to="/alunos" replace />} /><Route path="/alunos" element={<StudentsPage />} /><Route path="/alunos/novo" element={<StudentFormPage />} /><Route path="/alunos/:id/editar" element={<StudentFormPage />} /><Route path="/alunos/:id" element={<StudentDetailsPage />} /></Route><Route path="*" element={<Navigate to="/alunos" replace />} /></Routes></AppContext.Provider>;
+    addStudent: async (data) => {
+      exigirApiOnline();
+      const criado = await createAluno(data);
+      setStudents(s => [...s, criado]);
+      return criado;
+    },
+
+    updateStudent: async (id, data) => {
+      exigirApiOnline();
+      const atualizado = await updateAluno(id, data);
+      setStudents(s => s.map(x => String(x.id) === String(id) ? atualizado : x));
+      return atualizado;
+    },
+
+    removeStudent: async (id) => {
+      exigirApiOnline();
+      await deleteAluno(id);
+      setStudents(s => s.filter(x => String(x.id) !== String(id)));
+    },
+
+    // itens: [{ item_uniforme_id, quantidade_entregue }]
+    addDelivery: async (alunoId, usuarioId, itens) => {
+      exigirApiOnline();
+      const entrega = await registrarEntrega({ aluno_id: Number(alunoId), usuario_id: Number(usuarioId), itens });
+      // Recarrega só esse aluno pra atualizar status/tamanho/recebidos derivados
+      const data = await getAlunos();
+      setStudents(data);
+      return entrega;
+    },
+  }), [students, loading, apiStatus, carregarAlunos]);
+
+  return <AppContext.Provider value={value}><Routes><Route element={<Layout />}>
+    <Route index element={<Navigate to="/dashboard" replace />} />
+    <Route path="/dashboard" element={<DashboardPage />} />
+    <Route path="/alunos" element={<StudentsPage />} />
+    <Route path="/alunos/novo" element={<StudentFormPage />} />
+    <Route path="/alunos/:id/editar" element={<StudentFormPage />} />
+    <Route path="/alunos/:id" element={<StudentDetailsPage />} />
+    <Route path="/uniformes" element={<UniformesPage />} />
+    <Route path="/uniformes/entrada" element={<EstoqueEntradaPage />} />
+    <Route path="/uniformes/entrega" element={<RegistrarEntregaPage />} />
+    <Route path="/relatorios" element={<RelatoriosPage />} />
+  </Route><Route path="*" element={<Navigate to="/dashboard" replace />} /></Routes></AppContext.Provider>;
 }
