@@ -14,6 +14,11 @@ class Turma(Base):
     id = Column(Integer, primary_key=True, index=True)
     escola_id = Column(Integer, ForeignKey("escolas.id", ondelete="CASCADE"), nullable=False)
     serie = Column(Integer, nullable=False)
+    # Rótulo de exibição (ex: "5º A"). Adicionado além de `serie` porque o
+    # frontend já esperava turmas com letra de seção (5º A, 5º B...), e o
+    # ERD original só previa a série numérica. Documentar essa decisão no
+    # "documento de decisões de modelagem" da Semana 7.
+    nome = Column(String(20), nullable=False)
 
 class Aluno(Base):
     __tablename__ = "alunos"
@@ -25,6 +30,19 @@ class Aluno(Base):
     data_nascimento = Column(Date)
     nome_pai = Column(String(255))
     nome_mae = Column(String(255))
+    # Campos previstos pelas histórias da Sprint 2 para filtro/acompanhamento
+    # (design do Figma mostra os dois como Select editável no cadastro do
+    # aluno). Ficam como colunas reais, mas continuam sendo mantidas em dia
+    # automaticamente sempre que uma entrega é registrada para o aluno (ver
+    # routers/entregas.py) — o usuário pode ajustar manualmente também, por
+    # exemplo pra corrigir um cadastro antigo sem precisar lançar uma entrega.
+    tamanho_camiseta = Column(String(5))
+    situacao_uniforme = Column(String(20), default="Pendente")
+
+    __table_args__ = (
+        CheckConstraint("tamanho_camiseta IN ('PP', 'P', 'M', 'G', 'GG', 'XG', '3G')", name="chk_aluno_tamanho"),
+        CheckConstraint("situacao_uniforme IN ('Pendente', 'Recebido')", name="chk_aluno_situacao"),
+    )
 
 class Usuario(Base):
     __tablename__ = "usuarios"

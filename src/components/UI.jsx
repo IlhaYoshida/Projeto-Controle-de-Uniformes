@@ -1,9 +1,14 @@
 import { ChevronLeft, CircleUserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-export const Button = ({ variant = 'primary', className = '', children, ...props }) => <button className={`${variant === 'primary' ? 'bg-[#2867ed] text-white hover:bg-blue-700' : 'border border-slate-200 bg-white text-slate-900 hover:bg-slate-50'} inline-flex h-11 items-center justify-center gap-2 rounded-lg px-6 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${className}`} {...props}>{children}</button>;
+const buttonVariants = {
+  primary: 'bg-[#2563eb] text-white hover:bg-blue-700',
+  secondary: 'border border-slate-200 bg-white text-slate-900 hover:bg-slate-50',
+  danger: 'bg-[#dc2626] text-white hover:bg-red-700',
+};
+export const Button = ({ variant = 'primary', className = '', children, ...props }) => <button className={`${buttonVariants[variant] || buttonVariants.primary} inline-flex h-11 items-center justify-center gap-2 rounded-lg px-6 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${className}`} {...props}>{children}</button>;
 export const Role = () => <div className="flex h-10 items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold shadow-sm"><span className="h-5 w-5 rounded-full bg-blue-50"/>Secretaria</div>;
-export const Header = ({ eyebrow = 'ALUNOS', title, subtitle, actions }) => <div className="mb-6 flex flex-col justify-between gap-5 sm:flex-row sm:items-start"><div><div className="mb-2 text-[10px] font-bold text-[#2867ed]">{eyebrow}</div><h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-[28px]">{title}</h1>{subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}</div><div className="flex flex-wrap items-center justify-end gap-3"><Role/>{actions}</div></div>;
+export const Header = ({ eyebrow = 'ALUNOS', title, subtitle, actions }) => <div className="mb-6 flex flex-col justify-between gap-5 sm:flex-row sm:items-start"><div><div className="mb-2 text-[10px] font-bold text-[#2563eb]">{eyebrow}</div><h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-[28px]">{title}</h1>{subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}</div><div className="flex flex-wrap items-center justify-end gap-3"><Role/>{actions}</div></div>;
 export const Card = ({ className = '', children }) => <section className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</section>;
 export const Back = () => { const navigate = useNavigate(); return <Button variant="secondary" onClick={() => navigate(-1)} className="mb-5 h-10 px-4"><ChevronLeft size={16}/> Voltar</Button>; };
 export const Field = ({ label, required, className = '', ...props }) => <label className={`block ${className}`}><span className="mb-2 block text-xs font-semibold text-slate-900">{label}{required && ' *'}</span><input className="h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100" {...props}/></label>;
