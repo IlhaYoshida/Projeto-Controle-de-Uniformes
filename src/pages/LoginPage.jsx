@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Lock, Mail, School, User, CheckCircle2, ArrowRight } from 'lucide-react';
+import { School, User, Lock, Mail, ArrowRight, Sparkles, KeyRound } from 'lucide-react';
 import { login as apiLogin, getStatusInicial, setupInicial } from '../api';
 import { Button, Card, Field } from '../components/UI';
 
@@ -10,11 +10,11 @@ export default function LoginPage({ onLoginSuccess }) {
   const [processando, setProcessando] = useState(false);
 
   // Form de Login
-  const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
+  const [email, setEmail] = useState('admin@escola.gov.br');
+  const [senha, setSenha] = useState('admin123');
 
-  // Form de Setup Inicial
-  const [escolaNome, setEscolaNome] = useState('');
+  // Form de Setup / Novo Admin
+  const [escolaNome, setEscolaNome] = useState('Escola Municipal Central');
   const [diretor, setDiretor] = useState('');
   const [endereco, setEndereco] = useState('');
   const [usuarioNome, setUsuarioNome] = useState('');
@@ -30,6 +30,7 @@ export default function LoginPage({ onLoginSuccess }) {
         }
         if (res.escola_nome) {
           setEscolaCadastradaNome(res.escola_nome);
+          setEscolaNome(res.escola_nome);
         }
       })
       .catch(() => {})
@@ -82,7 +83,7 @@ export default function LoginPage({ onLoginSuccess }) {
       });
       onLoginSuccess(res.usuario);
     } catch (err) {
-      setErro(err.message || 'Erro durante a configuração inicial.');
+      setErro(err.message || 'Erro durante a configuração.');
     } finally {
       setProcessando(false);
     }
@@ -113,7 +114,9 @@ export default function LoginPage({ onLoginSuccess }) {
           <p className="text-xs text-slate-400 mt-1">
             {isSetup
               ? 'Configuração inicial da escola e usuário administrador'
-              : escolaCadastradaNome ? `Controle Escolar · ${escolaCadastradaNome}` : 'Sistema de Gestão e Controle Escolar de Uniformes'}
+              : escolaCadastradaNome
+              ? `Controle Escolar · ${escolaCadastradaNome}`
+              : 'Sistema de Gestão e Controle Escolar de Uniformes'}
           </p>
         </div>
 
@@ -125,17 +128,17 @@ export default function LoginPage({ onLoginSuccess }) {
           )}
 
           {isSetup ? (
-            /* CONFIGURAÇÃO INICIAL (Item 3, 10) */
+            /* CONFIGURAÇÃO INICIAL / CADASTRO DE ADMINISTRADOR */
             <form onSubmit={handleSetup} className="space-y-4">
               <div className="border-b border-slate-800 pb-3">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                  Passo 1: Dados da Escola Única
+                  Dados da Escola
                 </span>
                 <div className="mt-2 space-y-3">
                   <Field
                     label="Nome da escola"
                     required
-                    placeholder="Ex: Escola Municipal Marechal Rondon"
+                    placeholder="Ex: Escola Municipal Central"
                     value={escolaNome}
                     onChange={e => setEscolaNome(e.target.value)}
                   />
@@ -156,21 +159,21 @@ export default function LoginPage({ onLoginSuccess }) {
 
               <div className="pt-2">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                  Passo 2: Usuário Administrador
+                  Dados do Administrador
                 </span>
                 <div className="mt-2 space-y-3">
                   <Field
                     label="Seu nome completo"
                     required
-                    placeholder="Ex: Ana Maria"
+                    placeholder="Ex: Diego Vieira"
                     value={usuarioNome}
                     onChange={e => setUsuarioNome(e.target.value)}
                   />
                   <Field
-                    label="Seu e-mail"
+                    label="Seu e-mail de acesso"
                     required
                     type="email"
-                    placeholder="admin@escola.gov.br"
+                    placeholder="seu.email@escola.gov.br"
                     value={usuarioEmail}
                     onChange={e => setUsuarioEmail(e.target.value)}
                   />
@@ -185,20 +188,27 @@ export default function LoginPage({ onLoginSuccess }) {
                 </div>
               </div>
 
-              <div className="pt-4">
+              <div className="pt-4 space-y-2">
                 <Button type="submit" disabled={processando} className="w-full h-11">
                   {processando ? 'Configurando...' : 'Finalizar configuração e entrar'}
                 </Button>
+                <button
+                  type="button"
+                  onClick={() => { setIsSetup(false); setErro(''); }}
+                  className="w-full text-center text-xs text-slate-400 hover:text-white pt-2"
+                >
+                  Já possui um usuário cadastrado? <b>Fazer login</b>
+                </button>
               </div>
             </form>
           ) : (
-            /* TELA DE LOGIN OBRIGATÓRIO (Item 10) */
+            /* TELA DE LOGIN */
             <form onSubmit={handleLogin} className="space-y-4">
               <Field
                 label="E-mail de acesso"
                 required
                 type="email"
-                placeholder="seu.email@escola.gov.br"
+                placeholder="admin@escola.gov.br"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
               />
@@ -212,10 +222,28 @@ export default function LoginPage({ onLoginSuccess }) {
                 onChange={e => setSenha(e.target.value)}
               />
 
-              <div className="pt-3">
+              {/* Dica de Acesso Rápido */}
+              <div className="rounded-lg border border-blue-900/50 bg-blue-950/20 p-3 text-[11px] text-blue-300 flex items-start gap-2">
+                <KeyRound size={15} className="mt-0.5 text-blue-400 shrink-0" />
+                <div>
+                  <b>Credenciais padrão para teste:</b>
+                  <div className="text-slate-300 mt-0.5">E-mail: <code className="text-blue-300">admin@escola.gov.br</code></div>
+                  <div className="text-slate-300">Senha: <code className="text-blue-300">admin123</code></div>
+                </div>
+              </div>
+
+              <div className="pt-2 space-y-2">
                 <Button type="submit" disabled={processando} className="w-full h-11">
                   {processando ? 'Entrando...' : 'Entrar no sistema'}
                 </Button>
+
+                <button
+                  type="button"
+                  onClick={() => { setIsSetup(true); setErro(''); }}
+                  className="w-full text-center text-xs text-slate-400 hover:text-blue-400 pt-2 transition"
+                >
+                  Primeiro acesso ou deseja criar outro administrador? <b>Clique aqui</b>
+                </button>
               </div>
             </form>
           )}

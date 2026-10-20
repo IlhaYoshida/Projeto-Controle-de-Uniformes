@@ -44,9 +44,9 @@ def login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
 @router.post("/setup-inicial")
 def setup_inicial(dados: dict, db: Session = Depends(get_db)):
     """
-    Configuração inicial do sistema:
-    - Cadastra a escola única
-    - Cadastra o usuário administrador inicial
+    Configuração inicial ou cadastro/redefinição de administrador:
+    - Cadastra ou atualiza a escola única
+    - Cadastra ou atualiza o usuário administrador
     - Opcionalmente cadastra turmas e uniformes iniciais
     """
     escola_nome = dados.get("escola_nome")
@@ -67,12 +67,16 @@ def setup_inicial(dados: dict, db: Session = Depends(get_db)):
         registrar_log("SETUP_INICIAL", f"Escola '{escola.nome}' cadastrada no setup inicial")
     else:
         escola.nome = escola_nome
+        if dados.get("diretor"):
+            escola.diretor = dados.get("diretor")
+        if dados.get("endereco"):
+            escola.endereco = dados.get("endereco")
         db.commit()
 
-    # Verifica se já existe usuário com esse email
+    # Cria ou atualiza o usuário administrador
     usuario = db.query(models.Usuario).filter(models.Usuario.email == usuario_email).first()
+    senha_hash = bcrypt.hashpw(usuario_senha.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     if not usuario:
-        senha_hash = bcrypt.hashpw(usuario_senha.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
         usuario = models.Usuario(
             escola_id=escola.id,
             nome=usuario_nome,
@@ -82,7 +86,13 @@ def setup_inicial(dados: dict, db: Session = Depends(get_db)):
         db.add(usuario)
         db.commit()
         db.refresh(usuario)
-        registrar_log("SETUP_INICIAL", f"Usuário administrador '{usuario.nome}' cadastrado no setup inicial")
+        registrar_log("SETUP_INICIAL", f"Usuário administrador '{usuario.nome}' cadastrado")
+    else:
+        usuario.nome = usuario_nome
+        usuario.senha = senha_hash
+        usuario.escola_id = escola.id
+        db.commit()
+        registrar_log("SETUP_INICIAL", f"Usuário administrador '{usuario.nome}' atualizado")
 
     # Turmas iniciais se fornecidas
     turmas_iniciais = dados.get("turmas", [])
@@ -111,7 +121,7 @@ def setup_inicial(dados: dict, db: Session = Depends(get_db)):
     registrar_log("SETUP_INICIAL_CONCLUIDO", f"Setup inicial concluído para escola '{escola.nome}'")
 
     return {
-        "mensagem": "Setup inicial realizado com sucesso!",
+        "mensagem": "Configuração realizada com sucesso!",
         "escola_id": escola.id,
         "usuario": {
             "id": usuario.id,
