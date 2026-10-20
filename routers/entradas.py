@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from database import get_db
+from logger import registrar_log
 
 router = APIRouter(prefix="/entradas", tags=["Entradas de estoque"])
 
@@ -57,6 +58,7 @@ def registrar_entrada(entrada: schemas.EntradaUniformeCreate, db: Session = Depe
 
         # 5. Confirma todas as inserções no banco
         db.commit()
+        registrar_log("REGISTRAR_ENTRADA", f"Lote #{novo_lote.id} registrado com {len(entrada.itens)} item(ns), NF: {entrada.nota_fiscal or 'sem NF'}")
         return {"message": "Entrada registrada com sucesso!", "lote_id": novo_lote.id}
 
     except Exception as e:

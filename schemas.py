@@ -23,15 +23,19 @@ class EscolaOut(EscolaBase):
 # ============================================================
 class TurmaBase(BaseModel):
     escola_id: int
-    serie: int
     nome: str  # rótulo de exibição, ex: "5º A"
 
 class TurmaCreate(TurmaBase):
     pass
 
+class TurmaUpdate(BaseModel):
+    """Só envie o que quer atualizar."""
+    nome: Optional[str] = None
+
 class TurmaOut(TurmaBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    serie: Optional[int] = None  # auto-extraído do nome
 
 
 # ============================================================
@@ -45,10 +49,20 @@ class UsuarioBase(BaseModel):
 class UsuarioCreate(UsuarioBase):
     senha: str = Field(min_length=6, description="Enviada em texto puro pelo cliente; o backend faz o hash antes de salvar.")
 
+class UsuarioUpdate(BaseModel):
+    """Só envie o que quer atualizar."""
+    nome: Optional[str] = None
+    email: Optional[str] = None
+    senha: Optional[str] = Field(default=None, min_length=6)
+
 class UsuarioOut(UsuarioBase):
     """Nunca inclui a senha (nem o hash) na resposta."""
     model_config = ConfigDict(from_attributes=True)
     id: int
+
+class LoginRequest(BaseModel):
+    email: str
+    senha: str
 
 
 # ============================================================
@@ -62,14 +76,13 @@ class AlunoBase(BaseModel):
     data_nascimento: Optional[date] = None
     nome_pai: Optional[str] = None
     nome_mae: Optional[str] = None
+    telefone_pai: Optional[str] = None
+    email_pai: Optional[str] = None
+    telefone_mae: Optional[str] = None
+    email_mae: Optional[str] = None
 
 class AlunoCreate(AlunoBase):
-    # Campos previstos pelas histórias da Sprint para filtro/acompanhamento
-    # (editáveis no formulário, ver docs/erd.md). Se não vierem preenchidos,
-    # a situação começa como "Pendente" e o tamanho fica em branco até a
-    # primeira entrega ser registrada.
     tamanho_camiseta: Optional[str] = None
-    situacao_uniforme: Optional[str] = None
 
 class AlunoUpdate(BaseModel):
     """Todos os campos opcionais: só envie o que quer atualizar."""
@@ -79,31 +92,31 @@ class AlunoUpdate(BaseModel):
     data_nascimento: Optional[date] = None
     nome_pai: Optional[str] = None
     nome_mae: Optional[str] = None
+    telefone_pai: Optional[str] = None
+    email_pai: Optional[str] = None
+    telefone_mae: Optional[str] = None
+    email_mae: Optional[str] = None
     tamanho_camiseta: Optional[str] = None
-    situacao_uniforme: Optional[str] = None
 
 class AlunoOut(AlunoBase):
     """
-    Além dos campos cadastrais (que ficam salvos na tabela `alunos`), inclui
-    campos derivados/calculados para facilitar a vida do frontend, que já
-    esperava esse formato "achatado":
-      - turma / escola: nome de exibição, não só o id
+    Além dos campos cadastrais, inclui campos derivados/calculados:
+      - turma / escola: nome de exibição
       - idade: calculada a partir de data_nascimento
-      - tamanho / status: hoje são colunas reais (`tamanho_camiseta`,
-        `situacao_uniforme`), editáveis no formulário do aluno, mas também
-        atualizadas automaticamente sempre que uma entrega é registrada —
-        ver routers/entregas.py e "Observações" em docs/erd.md.
+      - tamanho: último tamanho de camiseta registrado
       - recebidos: quantidade de entregas já registradas para o aluno
     """
     model_config = ConfigDict(from_attributes=True)
     id: int
     tamanho_camiseta: Optional[str] = None
-    situacao_uniforme: Optional[str] = None
+    telefone_pai: Optional[str] = None
+    email_pai: Optional[str] = None
+    telefone_mae: Optional[str] = None
+    email_mae: Optional[str] = None
     turma: Optional[str] = None
     escola: Optional[str] = None
     idade: Optional[int] = None
     tamanho: Optional[str] = None
-    status: Optional[str] = None
     recebidos: int = 0
 
 
@@ -188,17 +201,46 @@ class ItemUniformeOut(BaseModel):
     quantidade_estoque: int
     alerta_saldo_baixo: bool = False
 
+class ItemUniformeCreate(BaseModel):
+    """Para criar tipos de uniforme customizados."""
+    tipo: str
+    tamanho: str
+
+class ItemUniformeUpdate(BaseModel):
+    tipo: Optional[str] = None
+    tamanho: Optional[str] = None
+
 
 # ============================================================
 # RELATORIOS
 # ============================================================
 class RelatorioEntregaTurma(BaseModel):
     turma_id: int
-    serie: int
+    turma_nome: str
     total_alunos: int
     total_alunos_com_entrega: int
     total_entregas: int
     total_pecas_entregues: int
+
+class RelatorioMensal(BaseModel):
+    """Relatório mensal com entregas e entradas."""
+    mes: int
+    nome_mes: str
+    entradas_pecas: int = 0
+    saidas_pecas: int = 0
+    entregas_realizadas: int = 0
+
+class RelatorioCompleto(BaseModel):
+    """Relatório completo com dados de todas as turmas e resumo mensal."""
+    ano: int
+    total_alunos: int
+    total_alunos_com_entrega: int
+    pct_alunos_com_entrega: float
+    total_pecas_entregues: int
+    total_pecas_em_estoque: int
+    total_entradas_ano: int
+    turmas: List[RelatorioEntregaTurma]
+    meses: List[RelatorioMensal]
 
 
 # ============================================================
