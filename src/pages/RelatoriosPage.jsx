@@ -1,18 +1,39 @@
-import { Download, FileBarChart, Calendar, Users, PackageCheck, Boxes, TrendingUp } from 'lucide-react';
+import { Download, FileBarChart, Calendar, Users, PackageCheck, Boxes, TrendingUp, FileText, Filter } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { getRelatorioCompleto, relatorioEntregasPorTurmaCsvUrl } from '../api';
-import { Button, Card, Empty, Header } from '../components/UI';
+import { getRelatorioCompleto, relatorioEntregasPorTurmaCsvUrl, exportarMovimentacoesPdfUrl, getUsuarios } from '../api';
+import { Button, Card, Empty, Header, Field, Select } from '../components/UI';
+
+const NOMES_MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
 
 export default function RelatoriosPage() {
   const [dados, setDados] = useState(null);
   const [ano, setAno] = useState(new Date().getFullYear());
+  const [mes, setMes] = useState(''); // '' = Todos
   const [abaAtiva, setAbaAtiva] = useState('turmas'); // 'turmas' | 'mensal'
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
 
+  // Modal de Exportação PDF de Movimentações (Item 1)
+  const [modalPdf, setModalPdf] = useState(false);
+  const [usuarios, setUsuarios] = useState([]);
+  const [pdfFiltros, setPdfFiltros] = useState({
+    data_inicio: '',
+    data_fim: '',
+    usuario_id: '',
+    tipo_movimento: 'todos',
+  });
+
+  useEffect(() => {
+    getUsuarios().then(setUsuarios).catch(() => setUsuarios([]));
+  }, []);
+
   const carregarRelatorio = () => {
     setLoading(true);
-    getRelatorioCompleto(ano)
+    const mesNum = mes ? Number(mes) : null;
+    getRelatorioCompleto(ano, mesNum)
       .then(setDados)
       .catch(() => setErro('Não foi possível carregar o relatório completo. Verifique se o backend está ativo.'))
       .finally(() => setLoading(false));
@@ -20,7 +41,14 @@ export default function RelatoriosPage() {
 
   useEffect(() => {
     carregarRelatorio();
-  }, [ano]);
+  }, [ano, mes]);
+
+  const handleBaixarPdf = (e) => {
+    e.preventDefault();
+    const url = exportarMovimentacoesPdfUrl(pdfFiltros);
+    window.open(url, '_blank');
+    setModalPdf(false);
+  };
 
   return (
     <div className="page-enter">
@@ -29,24 +57,105 @@ export default function RelatoriosPage() {
         title="Relatórios completos"
         subtitle="Estatísticas detalhadas por turma individual, fluxo mensal de entradas/saídas e indicadores gerais."
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={ano}
               onChange={e => setAno(Number(e.target.value))}
+              aria-label="Selecionar Ano"
               className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             >
               {[2024, 2025, 2026, 2027].map(a => (
                 <option key={a} value={a}>Ano {a}</option>
               ))}
             </select>
-            <a href={relatorioEntregasPorTurmaCsvUrl()} target="_blank" rel="noreferrer">
-              <Button variant="secondary" className="h-10 text-xs">
+            <select
+              value={mes}
+              onChange={e => setMes(e.target.value)}
+              aria-label="Selecionar Mês"
+              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              <option value="">Todos os meses</option>
+              {NOMES_MESES.map((nomeMes, idx) => (
+                <option key={nomeMes} value={idx + 1}>{nomeMes}</option>
+              ))}
+            </select>
+
+            <Button variant="secondary" onClick={() => setModalPdf(true)} className="h-10 text-xs gap-1.5">
+              <FileText size={15} className="text-red-600 dark:text-red-400" /> Exportar PDF
+            </Button>
+
+            <a href={relatorioEntregasPorTurmaCsvUrl(ano, mes ? Number(mes) : null)} target="_blank" rel="noreferrer">
+              <Button variant="secondary" className="h-10 text-xs gap-1.5">
                 <Download size={15} /> Exportar CSV
               </Button>
             </a>
           </div>
         }
       />
+
+      {/* MODAL DE FILTROS PARA EXPORTAÇÃO EM PDF (Item 1) */}
+      {modalPdf && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-2.5 mb-1">
+              <FileText className="text-red-600 dark:text-red-400" size={20} />
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Exportar Movimentações em PDF</h3>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+              Gere um documento PDF executivo de todas as entradas e saídas de uniformes com filtros opcionais:
+            </p>
+
+            <form onSubmit={handleBaixarPdf} className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field
+                  label="Data inicial"
+                  type="date"
+                  value={pdfFiltros.data_inicio}
+                  onChange={e => setPdfFiltros(f => ({ ...f, data_inicio: e.target.value }))}
+                />
+                <Field
+                  label="Data final"
+                  type="date"
+                  value={pdfFiltros.data_fim}
+                  onChange={e => setPdfFiltros(f => ({ ...f, data_fim: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Select
+                  label="Tipo de movimentação"
+                  value={pdfFiltros.tipo_movimento}
+                  onChange={e => setPdfFiltros(f => ({ ...f, tipo_movimento: e.target.value }))}
+                >
+                  <option value="todos">Todas (Entradas e Saídas)</option>
+                  <option value="entradas">Apenas Entradas (Lotes recebidos)</option>
+                  <option value="saidas">Apenas Saídas (Entregas aos alunos)</option>
+                </Select>
+
+                <Select
+                  label="Usuário que registrou"
+                  value={pdfFiltros.usuario_id}
+                  onChange={e => setPdfFiltros(f => ({ ...f, usuario_id: e.target.value }))}
+                >
+                  <option value="">Todos os usuários</option>
+                  {usuarios.map(u => (
+                    <option key={u.id} value={u.id}>{u.nome} ({u.email})</option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+                <Button variant="secondary" type="button" onClick={() => setModalPdf(false)} className="h-10 px-4 text-xs">
+                  Cancelar
+                </Button>
+                <Button type="submit" className="h-10 px-5 text-xs">
+                  <Download size={14} /> Gerar e Baixar PDF
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {erro && (
         <p className="mb-5 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">

@@ -19,6 +19,8 @@ export const login = payload => request('/auth/login', { method: 'POST', body: J
 export const getStatusInicial = () => request('/auth/status-inicial');
 export const setupInicial = payload => request('/auth/setup-inicial', { method: 'POST', body: JSON.stringify(payload) });
 
+export const autorizarAdmin = payload => request('/auth/autorizar-admin', { method: 'POST', body: JSON.stringify(payload) });
+
 // --- Alunos ---
 export async function getAlunos(params = {}) {
   const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v))).toString();
@@ -50,8 +52,9 @@ export const deleteUsuario = id => request(`/usuarios/${id}`, { method: 'DELETE'
 
 // --- Entrada de estoque (lote recebido) ---
 export const registrarEntrada = payload => request('/entradas', { method: 'POST', body: JSON.stringify(payload) });
+export const getLoteDetalhes = loteId => request(`/entradas/${loteId}/detalhes`);
 export const getEntradas = (params = {}) => {
-  const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v))).toString();
+  const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''))).toString();
   return request(`/entradas${qs ? `?${qs}` : ''}`);
 };
 
@@ -59,7 +62,7 @@ export const getEntradas = (params = {}) => {
 export const registrarEntrega = payload => request('/entregas', { method: 'POST', body: JSON.stringify(payload) });
 export const getEntregasDoAluno = alunoId => request(`/entregas/aluno/${alunoId}`);
 export const getEntregas = (params = {}) => {
-  const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v))).toString();
+  const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''))).toString();
   return request(`/entregas${qs ? `?${qs}` : ''}`);
 };
 
@@ -73,10 +76,39 @@ export const createItemUniforme = payload => request('/estoque/item', { method: 
 export const deleteItemUniforme = id => request(`/estoque/item/${id}`, { method: 'DELETE' });
 
 // --- Relatórios / Dashboard ---
-export const getRelatorioEntregasPorTurma = () => request('/relatorios/entregas-por-turma');
-export const getRelatorioCompleto = (ano) => request(`/relatorios/completo${ano ? `?ano=${ano}` : ''}`);
-export const relatorioEntregasPorTurmaCsvUrl = () => `${API_URL}/relatorios/entregas-por-turma/csv`;
-export const getDashboard = (ano) => request(`/relatorios/dashboard${ano ? `?ano=${ano}` : ''}`);
+export const getRelatorioEntregasPorTurma = (ano, mes) => {
+  const params = {};
+  if (ano) params.ano = ano;
+  if (mes) params.mes = mes;
+  const qs = new URLSearchParams(params).toString();
+  return request(`/relatorios/entregas-por-turma${qs ? `?${qs}` : ''}`);
+};
+export const getRelatorioCompleto = (ano, mes) => {
+  const params = {};
+  if (ano) params.ano = ano;
+  if (mes) params.mes = mes;
+  const qs = new URLSearchParams(params).toString();
+  return request(`/relatorios/completo${qs ? `?${qs}` : ''}`);
+};
+export const relatorioEntregasPorTurmaCsvUrl = (ano, mes) => {
+  const params = {};
+  if (ano) params.ano = ano;
+  if (mes) params.mes = mes;
+  const qs = new URLSearchParams(params).toString();
+  return `${API_URL}/relatorios/entregas-por-turma/csv${qs ? `?${qs}` : ''}`;
+};
+export const exportarMovimentacoesPdfUrl = (filtros = {}) => {
+  const clean = Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+  const qs = new URLSearchParams(clean).toString();
+  return `${API_URL}/relatorios/movimentacoes/pdf${qs ? `?${qs}` : ''}`;
+};
+export const getDashboard = (ano, mes) => {
+  const params = {};
+  if (ano) params.ano = ano;
+  if (mes) params.mes = mes;
+  const qs = new URLSearchParams(params).toString();
+  return request(`/relatorios/dashboard${qs ? `?${qs}` : ''}`);
+};
 
 // --- Logs ---
 export const getLogs = (limite = 200) => request(`/logs${limite ? `?limite=${limite}` : ''}`);

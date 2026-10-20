@@ -10,8 +10,9 @@ export default function LoginPage({ onLoginSuccess }) {
   const [processando, setProcessando] = useState(false);
 
   // Form de Login
-  const [email, setEmail] = useState('admin@escola.gov.br');
-  const [senha, setSenha] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [senha, setSenha] = useState('');
+  const [lembrarSenha, setLembrarSenha] = useState(false);
 
   // Form de Setup / Novo Admin
   const [escolaNome, setEscolaNome] = useState('Escola Municipal Central');
@@ -23,6 +24,19 @@ export default function LoginPage({ onLoginSuccess }) {
   const [escolaCadastradaNome, setEscolaCadastradaNome] = useState('');
 
   useEffect(() => {
+    try {
+      const savedLembrar = localStorage.getItem('uniformeplus_lembrar');
+      const savedEmail = localStorage.getItem('uniformeplus_email');
+      const savedSenha = localStorage.getItem('uniformeplus_senha');
+      if (savedLembrar === 'true') {
+        setLembrarSenha(true);
+        if (savedEmail) setEmail(savedEmail);
+        if (savedSenha) setSenha(savedSenha);
+      }
+    } catch {
+      // Ignora erro se localStorage estiver inacessível
+    }
+
     getStatusInicial()
       .then(res => {
         if (res.precisa_setup) {
@@ -45,6 +59,17 @@ export default function LoginPage({ onLoginSuccess }) {
     setProcessando(true);
     try {
       const user = await apiLogin({ email: email.trim(), senha });
+      try {
+        if (lembrarSenha) {
+          localStorage.setItem('uniformeplus_lembrar', 'true');
+          localStorage.setItem('uniformeplus_email', email.trim());
+          localStorage.setItem('uniformeplus_senha', senha);
+        } else {
+          localStorage.removeItem('uniformeplus_lembrar');
+          localStorage.removeItem('uniformeplus_email');
+          localStorage.removeItem('uniformeplus_senha');
+        }
+      } catch {}
       onLoginSuccess(user);
     } catch (err) {
       setErro(err.message || 'E-mail ou senha incorretos.');
@@ -81,6 +106,13 @@ export default function LoginPage({ onLoginSuccess }) {
           { tipo: 'Bermuda', tamanho: 'M' },
         ],
       });
+      try {
+        if (lembrarSenha) {
+          localStorage.setItem('uniformeplus_lembrar', 'true');
+          localStorage.setItem('uniformeplus_email', usuarioEmail.trim());
+          localStorage.setItem('uniformeplus_senha', usuarioSenha);
+        }
+      } catch {}
       onLoginSuccess(res.usuario);
     } catch (err) {
       setErro(err.message || 'Erro durante a configuração.');
@@ -102,7 +134,7 @@ export default function LoginPage({ onLoginSuccess }) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#090d16] p-4 relative overflow-hidden">
-      {/* Luz decorativa de fundo */}
+      {/* Luz decorativa suave de fundo */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
 
       <div className="w-full max-w-md z-10">
@@ -110,7 +142,7 @@ export default function LoginPage({ onLoginSuccess }) {
           <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-500/30 mb-3">
             <School size={28} />
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-white">UNIFORME+</h1>
+          <h1 className="text-2xl font-black tracking-tight text-slate-100">UniformePlus</h1>
           <p className="text-xs text-slate-400 mt-1">
             {isSetup
               ? 'Configuração inicial da escola e usuário administrador'
@@ -120,7 +152,8 @@ export default function LoginPage({ onLoginSuccess }) {
           </p>
         </div>
 
-        <Card className="p-7 shadow-2xl border-slate-800 bg-[#111827]">
+        {/* Card com modo escuro fixo */}
+        <div className="rounded-2xl border border-slate-700/80 bg-[#111827] p-7 shadow-2xl text-slate-100">
           {erro && (
             <p className="mb-5 rounded-lg bg-red-950/70 border border-red-800 p-3 text-xs text-red-300">
               {erro}
@@ -128,8 +161,8 @@ export default function LoginPage({ onLoginSuccess }) {
           )}
 
           {isSetup ? (
-            /* CONFIGURAÇÃO INICIAL / CADASTRO DE ADMINISTRADOR */
-            <form onSubmit={handleSetup} className="space-y-4">
+            /* CONFIGURAÇÃO INICIAL / CADASTRO DE ADMINISTRADOR COM TEXTOS INFORMATIVOS (Item 3) */
+            <form onSubmit={handleSetup} className="space-y-4 [&_span]:text-slate-200 [&_input]:bg-slate-900/90 [&_input]:border-slate-700 [&_input]:text-white [&_input]:placeholder:text-slate-500">
               <div className="border-b border-slate-800 pb-3">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
                   Dados da Escola
@@ -137,20 +170,23 @@ export default function LoginPage({ onLoginSuccess }) {
                 <div className="mt-2 space-y-3">
                   <Field
                     label="Nome da escola"
+                    helperText="Informe o nome oficial da escola ou instituição de ensino onde os uniformes serão distribuídos."
                     required
-                    placeholder="Ex: Escola Municipal Central"
+                    placeholder="Ex: Escola Municipal Marechal Rondon"
                     value={escolaNome}
                     onChange={e => setEscolaNome(e.target.value)}
                   />
                   <Field
-                    label="Diretor(a) (opcional)"
+                    label="Diretor(a) ou gestor(a) (opcional)"
+                    helperText="Nome completo da pessoa responsável pela direção escolar."
                     placeholder="Ex: Prof. Carlos Eduardo"
                     value={diretor}
                     onChange={e => setDiretor(e.target.value)}
                   />
                   <Field
-                    label="Endereço (opcional)"
-                    placeholder="Ex: Rua das Flores, 120"
+                    label="Endereço da escola (opcional)"
+                    helperText="Logradouro, número, bairro e cidade da sede escolar."
+                    placeholder="Ex: Rua das Flores, 120, Bairro Centro"
                     value={endereco}
                     onChange={e => setEndereco(e.target.value)}
                   />
@@ -159,26 +195,29 @@ export default function LoginPage({ onLoginSuccess }) {
 
               <div className="pt-2">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                  Dados do Administrador
+                  Dados do Usuário Administrador
                 </span>
                 <div className="mt-2 space-y-3">
                   <Field
-                    label="Seu nome completo"
+                    label="Nome completo do administrador"
+                    helperText="Nome do profissional que administrará o sistema, usuários e relatórios."
                     required
                     placeholder="Ex: Diego Vieira"
                     value={usuarioNome}
                     onChange={e => setUsuarioNome(e.target.value)}
                   />
                   <Field
-                    label="Seu e-mail de acesso"
+                    label="E-mail de acesso"
+                    helperText="E-mail institucional ou pessoal que será utilizado para fazer login no sistema."
                     required
                     type="email"
-                    placeholder="seu.email@escola.gov.br"
+                    placeholder="admin@escola.gov.br"
                     value={usuarioEmail}
                     onChange={e => setUsuarioEmail(e.target.value)}
                   />
                   <Field
-                    label="Sua senha de acesso"
+                    label="Senha de acesso"
+                    helperText="Crie uma senha de acesso com no mínimo 6 caracteres para garantir a segurança."
                     required
                     type="password"
                     placeholder="Mínimo 6 caracteres"
@@ -195,22 +234,28 @@ export default function LoginPage({ onLoginSuccess }) {
                 <button
                   type="button"
                   onClick={() => { setIsSetup(false); setErro(''); }}
-                  className="w-full text-center text-xs text-slate-400 hover:text-white pt-2"
+                  className="w-full text-center text-xs text-slate-400 hover:text-white pt-2 transition"
                 >
-                  Já possui um usuário cadastrado? <b>Fazer login</b>
+                  Já possui um usuário cadastrado? <b className="text-blue-400">Fazer login</b>
                 </button>
               </div>
             </form>
           ) : (
-            /* TELA DE LOGIN */
-            <form onSubmit={handleLogin} className="space-y-4">
+            /* TELA DE LOGIN COM LEMBRAR SENHA (Item 2) */
+            <form onSubmit={handleLogin} className="space-y-4 [&_span]:text-slate-200 [&_input]:bg-slate-900/90 [&_input]:border-slate-700 [&_input]:text-white [&_input]:placeholder:text-slate-500">
               <Field
                 label="E-mail de acesso"
                 required
                 type="email"
-                placeholder="admin@escola.gov.br"
+                placeholder="seu.email@escola.gov.br"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={e => {
+                  const val = e.target.value;
+                  setEmail(val);
+                  if (lembrarSenha) {
+                    try { localStorage.setItem('uniformeplus_email', val.trim()); } catch {}
+                  }
+                }}
               />
 
               <Field
@@ -219,17 +264,41 @@ export default function LoginPage({ onLoginSuccess }) {
                 type="password"
                 placeholder="••••••••"
                 value={senha}
-                onChange={e => setSenha(e.target.value)}
+                onChange={e => {
+                  const val = e.target.value;
+                  setSenha(val);
+                  if (lembrarSenha) {
+                    try { localStorage.setItem('uniformeplus_senha', val); } catch {}
+                  }
+                }}
               />
 
-              {/* Dica de Acesso Rápido */}
-              <div className="rounded-lg border border-blue-900/50 bg-blue-950/20 p-3 text-[11px] text-blue-300 flex items-start gap-2">
-                <KeyRound size={15} className="mt-0.5 text-blue-400 shrink-0" />
-                <div>
-                  <b>Credenciais padrão para teste:</b>
-                  <div className="text-slate-300 mt-0.5">E-mail: <code className="text-blue-300">admin@escola.gov.br</code></div>
-                  <div className="text-slate-300">Senha: <code className="text-blue-300">admin123</code></div>
-                </div>
+              {/* Funcionalidade Lembrar Senha */}
+              <div className="flex items-center justify-between text-xs pt-1">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300 hover:text-white select-none transition">
+                  <input
+                    type="checkbox"
+                    id="lembrar-senha"
+                    checked={lembrarSenha}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setLembrarSenha(checked);
+                      try {
+                        if (!checked) {
+                          localStorage.removeItem('uniformeplus_lembrar');
+                          localStorage.removeItem('uniformeplus_email');
+                          localStorage.removeItem('uniformeplus_senha');
+                        } else {
+                          localStorage.setItem('uniformeplus_lembrar', 'true');
+                          localStorage.setItem('uniformeplus_email', email.trim());
+                          localStorage.setItem('uniformeplus_senha', senha);
+                        }
+                      } catch {}
+                    }}
+                    className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                  />
+                  <span>Lembrar login e senha</span>
+                </label>
               </div>
 
               <div className="pt-2 space-y-2">
@@ -242,13 +311,14 @@ export default function LoginPage({ onLoginSuccess }) {
                   onClick={() => { setIsSetup(true); setErro(''); }}
                   className="w-full text-center text-xs text-slate-400 hover:text-blue-400 pt-2 transition"
                 >
-                  Primeiro acesso ou deseja criar outro administrador? <b>Clique aqui</b>
+                  Primeiro acesso ou deseja criar outro administrador? <b className="text-blue-400">Clique aqui</b>
                 </button>
               </div>
             </form>
           )}
-        </Card>
+        </div>
       </div>
     </div>
   );
 }
+

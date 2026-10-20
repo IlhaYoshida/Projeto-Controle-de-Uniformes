@@ -27,6 +27,7 @@ def criar_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db))
         nome=usuario.nome,
         email=usuario.email,
         senha=hash_senha(usuario.senha),
+        role=usuario.role or "padrao",
     )
     db.add(novo_usuario)
     try:
@@ -35,7 +36,7 @@ def criar_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db))
         db.rollback()
         raise HTTPException(status_code=409, detail="Já existe um usuário com esse e-mail")
     db.refresh(novo_usuario)
-    registrar_log("CRIAR_USUARIO", f"Usuário '{novo_usuario.nome}' (id={novo_usuario.id}) criado")
+    registrar_log("CRIAR_USUARIO", f"Usuário '{novo_usuario.nome}' (id={novo_usuario.id}, nivel={novo_usuario.role}) criado")
     return novo_usuario
 
 
@@ -67,6 +68,8 @@ def atualizar_usuario(usuario_id: int, dados: schemas.UsuarioUpdate, db: Session
         usuario.email = dados.email
     if dados.senha is not None:
         usuario.senha = hash_senha(dados.senha)
+    if dados.role is not None:
+        usuario.role = dados.role
 
     try:
         db.commit()
@@ -74,7 +77,7 @@ def atualizar_usuario(usuario_id: int, dados: schemas.UsuarioUpdate, db: Session
         db.rollback()
         raise HTTPException(status_code=409, detail="Já existe um usuário com esse e-mail")
     db.refresh(usuario)
-    registrar_log("ATUALIZAR_USUARIO", f"Usuário '{usuario.nome}' (id={usuario.id}) atualizado")
+    registrar_log("ATUALIZAR_USUARIO", f"Usuário '{usuario.nome}' (id={usuario.id}, nivel={usuario.role}) atualizado")
     return usuario
 
 
