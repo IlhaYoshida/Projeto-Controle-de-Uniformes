@@ -201,3 +201,37 @@ Caso prefira configurar os dados da sua escola e registrar seu próprio usuário
 - **Validação de Dados no Frontend**: Nomes não aceitam números; datas de nascimento futuras são bloqueadas; e-mails e telefones são formatados e validados.
 - **Escola Única**: O sistema opera em modelo de escola única definida na configuração inicial, eliminando seletores redundantes no cadastro de alunos.
 - **Auditoria Contínua**: Toda operação relevante é gravada com carimbo de data/hora, usuário responsável e detalhes no arquivo `logs/sistema_logs.txt`.
+
+---
+
+## Como Executar a Suíte de Testes
+
+O projeto conta com uma suíte abrangente de testes automatizados (`tests/test_suite.py`) que valida todas as regras de negócio de ponta a ponta utilizando um banco de dados SQLite isolado em memória (`:memory:`), sem alterar seus dados reais do PostgreSQL e sem necessidade de subir servidores externos.
+
+### Executando os testes
+
+Com o ambiente virtual ativado:
+```bash
+pytest -v
+```
+
+Ou diretamente pelo executável do ambiente virtual:
+```bash
+# No Windows (PowerShell / Prompt):
+venv\Scripts\pytest.exe -v
+
+# No Linux / macOS:
+./venv/bin/pytest -v
+```
+
+### O que é testado na suíte:
+
+1. **`test_auth_status_e_setup`**: Verifica o assistente de primeiro acesso e cadastro inicial da escola e do administrador.
+2. **`test_login_sucesso_e_falha`**: Testa a validação de credenciais corretas e rejeição de senhas incorretas com Bcrypt.
+3. **`test_turmas_duplicidade_e_serie`**: Testa a inferência automática da série a partir do nome da turma e o bloqueio de turmas com o mesmo nome no mesmo ano letivo.
+4. **`test_alunos_contato_pais_e_matricula_duplicada`**: Testa o cadastro de alunos com telefones dos pais e o bloqueio estrito de duplicidade de matrícula.
+5. **`test_uniformes_customizados`**: Valida a criação, listagem e remoção de novas peças e tamanhos customizados no estoque.
+6. **`test_fluxo_entrada_e_saida`**: Valida a entrada de lotes e a subsequente saída de uniformes, confirmando o débito automático no estoque.
+7. **`test_relatorios_completo_e_csv`**: Valida a integridade do endpoint de relatório consolidado e a geração do arquivo CSV de prestação de contas.
+8. **`test_auditoria_logs`**: Garante que as ações dos usuários são devidamente gravadas e consultáveis no arquivo `sistema_logs.txt`.
+
