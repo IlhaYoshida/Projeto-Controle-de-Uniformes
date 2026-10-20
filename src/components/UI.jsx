@@ -54,11 +54,17 @@ export const Back = () => {
   );
 };
 
-export const Field = ({ label, required, className = '', error, ...props }) => (
+export const Field = ({ label, required, className = '', error, helperText, ...props }) => (
   <label className={`block ${className}`}>
-    <span className="mb-2 block text-xs font-semibold text-slate-900 dark:text-slate-200">
+    <span className="mb-1 block text-xs font-semibold text-slate-900 dark:text-slate-200">
       {label}{required && ' *'}
     </span>
+    {helperText && (
+      <span className="mb-1.5 block text-[11px] leading-tight !text-slate-400 !font-normal">
+        {helperText}
+      </span>
+    )}
+
     <input
       className={`h-11 w-full rounded-lg border px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 ${
         error ? 'border-red-500 bg-red-50/30' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
@@ -68,6 +74,7 @@ export const Field = ({ label, required, className = '', error, ...props }) => (
     {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
   </label>
 );
+
 
 export const Select = ({ label, required, children, className = '', error, ...props }) => (
   <label className={`block ${className}`}>

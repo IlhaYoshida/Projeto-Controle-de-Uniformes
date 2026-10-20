@@ -30,15 +30,21 @@ def status_inicial(db: Session = Depends(get_db)):
 @router.post("/login", response_model=schemas.UsuarioOut)
 def login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
     """Autentica um usuário com email e senha."""
-    usuario = db.query(models.Usuario).filter(models.Usuario.email == dados.email).first()
+    email_limpo = (dados.email or "").strip()
+    usuario = db.query(models.Usuario).filter(models.Usuario.email == email_limpo).first()
     if not usuario:
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
 
     if not bcrypt.checkpw(dados.senha.encode("utf-8"), usuario.senha.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
 
+    if not getattr(usuario, "role", None):
+        usuario.role = "admin"
+        db.commit()
+
     registrar_log("LOGIN", f"Usuário '{usuario.nome}' (id={usuario.id}) fez login", usuario.nome)
     return usuario
+
 
 
 @router.post("/setup-inicial")
