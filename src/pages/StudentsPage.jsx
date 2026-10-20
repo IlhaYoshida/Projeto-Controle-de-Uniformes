@@ -4,19 +4,56 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../App';
 import { initials } from '../data';
 import ImportModal from '../components/ImportModal';
-import { Badge, Button, Card, Empty, Header, Select } from '../components/UI';
+import { Badge, Button, Card, Empty, Header, Select, ConfirmModal, AdminAuthModal } from '../components/UI';
 
 export default function StudentsPage() {
-  const { students, loading, apiStatus, removeStudent } = useApp();
+  const { students, loading, apiStatus, removeStudent, currentUser } = useApp();
   const navigate = useNavigate();
   const [filters, setFilters] = useState({ q: '', turma: '', idade: '', tamanho: '', status: '' });
   const [modal, setModal] = useState(false);
   const [page, setPage] = useState(1);
   const [deletandoId, setDeletandoId] = useState(null);
 
+  // Estados de confirmação e RBAC
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+  const [adminAuthModal, setAdminAuthModal] = useState({ isOpen: false, actionDesc: '', onSuccess: null });
+
   const set = (k, v) => {
     setFilters(f => ({ ...f, [k]: v }));
     setPage(1);
+  };
+
+  const executarAcaoSegura = (actionDesc, onPermitido) => {
+    if (currentUser?.role === 'padrao') {
+      setAdminAuthModal({
+        isOpen: true,
+        actionDesc,
+        onSuccess: onPermitido,
+      });
+    } else {
+      onPermitido();
+    }
+  };
+
+  const handleExcluir = (id, nome) => {
+    executarAcaoSegura(`excluir o aluno "${nome}"`, () => {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Excluir Aluno',
+        message: `Tem certeza que deseja excluir o cadastro do aluno "${nome}"? Esta ação removerá o aluno e seu vínculo com a turma.`,
+        onConfirm: async () => {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setDeletandoId(id);
+          try {
+            await removeStudent(id);
+          } catch (err) {
+            alert(err.message || 'Erro ao excluir aluno.');
+          } finally {
+            setDeletandoId(null);
+          }
+        },
+      });
+    });
   };
 
   const filtered = useMemo(() => {
@@ -35,19 +72,6 @@ export default function StudentsPage() {
   const rows = filtered.slice((page - 1) * 8, page * 8);
 
   const options = key => [...new Set(students.map(s => s[key]).filter(v => v !== null && v !== undefined && v !== '').map(String))];
-
-  const handleExcluir = async (id, nome) => {
-    if (window.confirm(`Tem certeza que deseja excluir o aluno "${nome}"?`)) {
-      setDeletandoId(id);
-      try {
-        await removeStudent(id);
-      } catch (err) {
-        alert(err.message || 'Erro ao excluir aluno.');
-      } finally {
-        setDeletandoId(null);
-      }
-    }
-  };
 
   return (
     <div className="page-enter">
@@ -194,6 +218,23 @@ export default function StudentsPage() {
         </div>
       </Card>
       {modal && <ImportModal close={() => setModal(false)} />}
+
+      {/* Confirmação in-app (Item 8) */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Autorização de administrador (Item 18) */}
+      <AdminAuthModal
+        isOpen={adminAuthModal.isOpen}
+        actionDesc={adminAuthModal.actionDesc}
+        onSuccess={adminAuthModal.onSuccess}
+        onClose={() => setAdminAuthModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

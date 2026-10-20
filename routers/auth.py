@@ -82,6 +82,7 @@ def setup_inicial(dados: dict, db: Session = Depends(get_db)):
             nome=usuario_nome,
             email=usuario_email,
             senha=senha_hash,
+            role="admin",
         )
         db.add(usuario)
         db.commit()
@@ -90,6 +91,7 @@ def setup_inicial(dados: dict, db: Session = Depends(get_db)):
     else:
         usuario.nome = usuario_nome
         usuario.senha = senha_hash
+        usuario.role = "admin"
         usuario.escola_id = escola.id
         db.commit()
         registrar_log("SETUP_INICIAL", f"Usuário administrador '{usuario.nome}' atualizado")
@@ -128,5 +130,31 @@ def setup_inicial(dados: dict, db: Session = Depends(get_db)):
             "nome": usuario.nome,
             "email": usuario.email,
             "escola_id": usuario.escola_id,
+            "role": getattr(usuario, "role", "admin") or "admin",
         }
     }
+
+
+@router.post("/autorizar-admin")
+def autorizar_admin(dados: schemas.AutorizarAdminRequest, db: Session = Depends(get_db)):
+    """Valida credenciais de administrador para liberar ações restritas a usuários padrão."""
+    usuario = db.query(models.Usuario).filter(models.Usuario.email == dados.email.strip()).first()
+    if not usuario:
+        raise HTTPException(status_code=401, detail="Credenciais de administrador incorretas")
+
+    if not bcrypt.checkpw(dados.senha.encode("utf-8"), usuario.senha.encode("utf-8")):
+        raise HTTPException(status_code=401, detail="Credenciais de administrador incorretas")
+
+    user_role = getattr(usuario, "role", "admin")
+    if user_role != "admin":
+        raise HTTPException(status_code=403, detail="Este usuário não possui privilégios de administrador")
+
+    acao_desc = dados.acao or "Ação restrita"
+    registrar_log("AUTORIZACAO_ADMIN", f"Ação '{acao_desc}' autorizada pelo administrador '{usuario.nome}' ({usuario.email})", usuario.nome)
+
+    return {
+        "autorizado": True,
+        "admin_nome": usuario.nome,
+        "admin_email": usuario.email,
+    }
+

@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getEscolas, getUsuarios, registrarEntrada, getTiposDisponiveis, getTamanhosDisponiveis } from '../api';
 import { TAMANHOS_UNIFORME, TIPOS_PADRAO } from '../data';
-import { Back, Button, Card, Field, Header, Select } from '../components/UI';
+import { Back, Button, Card, Field, Header, Select, ReviewModal } from '../components/UI';
 import { useApp } from '../App';
 
 const linhaVazia = { tipo: '', tamanho: '', quantidade: 1 };
+const hojeStr = new Date().toISOString().slice(0, 10);
 
 export default function EstoqueEntradaPage() {
   const navigate = useNavigate();
@@ -15,13 +16,14 @@ export default function EstoqueEntradaPage() {
   const [usuarios, setUsuarios] = useState([]);
   const [escolaId, setEscolaId] = useState('');
   const [usuarioId, setUsuarioId] = useState('');
+  const [dataRecebimento, setDataRecebimento] = useState(hojeStr);
   const [notaFiscal, setNotaFiscal] = useState('');
   const [tiposDisponiveis, setTiposDisponiveis] = useState(TIPOS_PADRAO);
   const [tamanhosDisponiveis, setTamanhosDisponiveis] = useState(TAMANHOS_UNIFORME);
   const [linhas, setLinhas] = useState([{ ...linhaVazia }]);
   const [erro, setErro] = useState('');
-  const [sucesso, setSucesso] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [revisaoAberta, setRevisaoAberta] = useState(false);
 
   useEffect(() => {
     getEscolas().then(list => {
@@ -51,37 +53,73 @@ export default function EstoqueEntradaPage() {
   const removeLinha = (i) => setLinhas(l => l.filter((_, idx) => idx !== i));
   const mudaLinha = (i, campo, valor) => setLinhas(l => l.map((x, idx) => idx === i ? { ...x, [campo]: valor } : x));
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const validarCampos = () => {
     setErro('');
-    setSucesso('');
+    if (!usuarioId) {
+      setErro('Selecione o responsável pelo recebimento do lote.');
+      return false;
+    }
+    if (!dataRecebimento) {
+      setErro('Informe a data do recebimento do lote.');
+      return false;
+    }
+    if (dataRecebimento > hojeStr) {
+      setErro('A data de recebimento não pode ser posterior à data atual.');
+      return false;
+    }
 
-    const targetEscolaId = escolaId || appEscolaId || 1;
-    if (!usuarioId) return setErro('Selecione o responsável pelo recebimento do lote.');
     const itens = linhas
       .filter(l => l.tipo && l.tamanho)
       .map(l => ({ tipo: l.tipo, tamanho: l.tamanho, quantidade: Number(l.quantidade) || 0 }));
 
-    if (!itens.length) return setErro('Adicione pelo menos um item recebido.');
-    if (itens.some(i => i.quantidade <= 0)) return setErro('A quantidade de cada item precisa ser maior que zero.');
+    if (!itens.length) {
+      setErro('Adicione pelo menos um item recebido.');
+      return false;
+    }
+    if (itens.some(i => i.quantidade <= 0)) {
+      setErro('A quantidade de cada item precisa ser maior que zero.');
+      return false;
+    }
+    return true;
+  };
+
+  const abrirRevisao = (e) => {
+    e.preventDefault();
+    if (validarCampos()) {
+      setRevisaoAberta(true);
+    }
+  };
+
+  const confirmarEntrada = async () => {
+    setErro('');
+    const targetEscolaId = escolaId || appEscolaId || 1;
+    const itens = linhas
+      .filter(l => l.tipo && l.tamanho)
+      .map(l => ({ tipo: l.tipo, tamanho: l.tamanho, quantidade: Number(l.quantidade) || 0 }));
 
     setSalvando(true);
     try {
-      const resultado = await registrarEntrada({
+      await registrarEntrada({
         escola_id: Number(targetEscolaId),
         usuario_id: Number(usuarioId),
-        nota_fiscal: notaFiscal || null,
+        nota_fiscal: notaFiscal.trim() ? notaFiscal.trim() : null,
+        data_recebimento: dataRecebimento,
         itens,
       });
-      setSucesso(`Entrada registrada com sucesso! (lote #${resultado.lote_id})`);
-      setLinhas([{ ...linhaVazia }]);
-      setNotaFiscal('');
+      setRevisaoAberta(false);
+      // Redireciona para a página de uniformes conforme item 11
+      navigate('/uniformes');
     } catch (err) {
       setErro(err.message || 'Não foi possível registrar a entrada.');
+      setRevisaoAberta(false);
     } finally {
       setSalvando(false);
     }
   };
+
+  const usuarioSelecionado = usuarios.find(u => String(u.id) === String(usuarioId));
+  const itensValidos = linhas.filter(l => l.tipo && l.tamanho);
+  const totalPecas = itensValidos.reduce((acc, l) => acc + (Number(l.quantidade) || 0), 0);
 
   return (
     <div className="page-enter">
@@ -91,20 +129,15 @@ export default function EstoqueEntradaPage() {
         subtitle="Registre o recebimento de um novo lote de uniformes vindo do governo/fornecedor."
       />
       <Back />
-      <form onSubmit={submit}>
+      <form onSubmit={abrirRevisao}>
         <Card className="p-6 sm:p-8">
           {erro && (
             <p className="mb-5 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
               {erro}
             </p>
           )}
-          {sucesso && (
-            <p className="mb-5 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-              {sucesso}
-            </p>
-          )}
 
-          <div className="mb-7 grid gap-5 md:grid-cols-2">
+          <div className="mb-7 grid gap-5 sm:grid-cols-3">
             <div>
               <Select
                 label="Responsável pelo recebimento"
@@ -118,12 +151,24 @@ export default function EstoqueEntradaPage() {
                 ))}
               </Select>
             </div>
-            <Field
-              label="Nota fiscal (opcional)"
-              value={notaFiscal}
-              onChange={e => setNotaFiscal(e.target.value)}
-              placeholder="Ex: NF-000123"
-            />
+            <div>
+              <Field
+                label="Data de recebimento"
+                type="date"
+                required
+                max={hojeStr}
+                value={dataRecebimento}
+                onChange={e => setDataRecebimento(e.target.value)}
+              />
+            </div>
+            <div>
+              <Field
+                label="Nota fiscal (opcional)"
+                value={notaFiscal}
+                onChange={e => setNotaFiscal(e.target.value)}
+                placeholder="Ex: NF-000123"
+              />
+            </div>
           </div>
 
           <h2 className="mb-3 text-[10px] font-bold text-[#2563eb] dark:text-blue-400">ITENS RECEBIDOS NESTE LOTE</h2>
@@ -185,11 +230,71 @@ export default function EstoqueEntradaPage() {
               Cancelar
             </Button>
             <Button type="submit" disabled={salvando}>
-              {salvando ? 'Registrando...' : 'Registrar entrada'}
+              Registrar entrada
             </Button>
           </div>
         </Card>
       </form>
+
+      {/* MODAL DE REVISÃO DO LOTE (Item 7 e 11) */}
+      <ReviewModal
+        isOpen={revisaoAberta}
+        title="Revisar Entrada de Estoque"
+        subtitle="Confira os detalhes do lote de uniformes antes de confirmar a entrada:"
+        confirmText="Confirmar Entrada"
+        cancelText="Voltar e Corrigir"
+        loading={salvando}
+        onConfirm={confirmarEntrada}
+        onClose={() => setRevisaoAberta(false)}
+      >
+        <div className="space-y-4 text-xs sm:text-sm">
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/60">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Responsável:</span>
+                <p className="font-medium text-slate-800 dark:text-white">{usuarioSelecionado?.nome || '-'}</p>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Data de Recebimento:</span>
+                <p className="font-medium text-slate-800 dark:text-white">
+                  {dataRecebimento ? dataRecebimento.split('-').reverse().join('/') : '-'}
+                </p>
+              </div>
+              <div className="col-span-2">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Nota Fiscal:</span>
+                <p className="font-medium text-slate-800 dark:text-white">{notaFiscal.trim() || 'Não informada (sem NF)'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center justify-between font-semibold text-slate-700 dark:text-slate-300">
+              <span>Itens a serem creditados ({itensValidos.length}):</span>
+              <span className="text-[#2563eb] dark:text-blue-400">Total: {totalPecas} peças</span>
+            </div>
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                  <tr>
+                    <th className="p-2">Item</th>
+                    <th className="p-2">Tamanho</th>
+                    <th className="p-2 text-right">Qtd</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {itensValidos.map((it, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                      <td className="p-2 font-medium text-slate-800 dark:text-slate-200">{it.tipo}</td>
+                      <td className="p-2 text-slate-600 dark:text-slate-400">{it.tamanho}</td>
+                      <td className="p-2 text-right font-bold text-emerald-600 dark:text-emerald-400">+{it.quantidade}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </ReviewModal>
     </div>
   );
 }

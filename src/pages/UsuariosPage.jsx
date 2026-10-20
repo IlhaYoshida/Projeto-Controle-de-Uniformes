@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { UserPlus, Edit, Trash2, Shield, Mail, Key } from 'lucide-react';
+import { UserPlus, Edit, Trash2, Shield, Mail, ShieldCheck, UserCheck } from 'lucide-react';
 import { getUsuarios, createUsuario, updateUsuario, deleteUsuario } from '../api';
 import { useApp } from '../App';
-import { Button, Card, Empty, Header, Field } from '../components/UI';
+import { Button, Card, Empty, Header, Field, Select, ConfirmModal, AdminAuthModal } from '../components/UI';
 import { initials } from '../data';
 
 export default function UsuariosPage() {
@@ -13,6 +13,22 @@ export default function UsuariosPage() {
   const [sucesso, setSucesso] = useState('');
   const [modalNovo, setModalNovo] = useState(false);
   const [usuarioEditando, setUsuarioEditando] = useState(null);
+
+  // Estados de confirmação e RBAC
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+  const [adminAuthModal, setAdminAuthModal] = useState({ isOpen: false, actionDesc: '', onSuccess: null });
+
+  const executarAcaoSegura = (actionDesc, onPermitido) => {
+    if (currentUser?.role === 'padrao') {
+      setAdminAuthModal({
+        isOpen: true,
+        actionDesc,
+        onSuccess: onPermitido,
+      });
+    } else {
+      onPermitido();
+    }
+  };
 
   const carregarUsuarios = async () => {
     setLoading(true);
@@ -30,22 +46,30 @@ export default function UsuariosPage() {
     carregarUsuarios();
   }, []);
 
-  const handleExcluir = async (usuario) => {
+  const handleExcluir = (usuario) => {
     if (currentUser?.id === usuario.id) {
       return setErro('Você não pode excluir o seu próprio usuário conectado.');
     }
 
-    if (!window.confirm(`Tem certeza que deseja remover o usuário "${usuario.nome}" (${usuario.email})?`)) return;
-
-    setErro('');
-    setSucesso('');
-    try {
-      await deleteUsuario(usuario.id);
-      setSucesso(`Usuário "${usuario.nome}" excluído com sucesso.`);
-      carregarUsuarios();
-    } catch (err) {
-      setErro(err.message || 'Erro ao excluir usuário.');
-    }
+    executarAcaoSegura(`excluir o usuário "${usuario.nome}"`, () => {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Excluir Usuário',
+        message: `Tem certeza que deseja remover o usuário "${usuario.nome}" (${usuario.email}) do sistema?`,
+        onConfirm: async () => {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setErro('');
+          setSucesso('');
+          try {
+            await deleteUsuario(usuario.id);
+            setSucesso(`Usuário "${usuario.nome}" excluído com sucesso.`);
+            carregarUsuarios();
+          } catch (err) {
+            setErro(err.message || 'Erro ao excluir usuário.');
+          }
+        },
+      });
+    });
   };
 
   return (
@@ -53,7 +77,7 @@ export default function UsuariosPage() {
       <Header
         eyebrow="GERENCIAMENTO DE ACESSO"
         title="Usuários do sistema"
-        subtitle="Controle os profissionais que têm acesso ao sistema de uniformes da escola."
+        subtitle="Controle os profissionais que têm acesso ao sistema de uniformes da escola e seus níveis de permissão."
         actions={
           <Button onClick={() => setModalNovo(true)}>
             <UserPlus size={16} /> Novo usuário
@@ -84,7 +108,7 @@ export default function UsuariosPage() {
           <table className="w-full min-w-[650px] border-collapse text-left text-xs">
             <thead>
               <tr className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                {['Usuário', 'E-mail de acesso', 'Função', 'Status', 'Ações'].map(h => (
+                {['Usuário', 'E-mail de acesso', 'Nível de Permissão', 'Status', 'Ações'].map(h => (
                   <th key={h} className="px-4 py-3 font-medium">{h}</th>
                 ))}
               </tr>
@@ -92,6 +116,7 @@ export default function UsuariosPage() {
             <tbody>
               {usuarios.map(u => {
                 const isCurrent = currentUser?.id === u.id;
+                const isAdmin = u.role === 'admin';
                 return (
                   <tr
                     key={u.id}
@@ -116,9 +141,15 @@ export default function UsuariosPage() {
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <span className="inline-flex items-center gap-1 text-slate-700 dark:text-slate-300">
-                        <Shield size={13} className="text-blue-600 dark:text-blue-400" /> Secretaria / Gestor
-                      </span>
+                      {isAdmin ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-100 px-2.5 py-1 text-[11px] font-semibold text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                          <ShieldCheck size={13} className="text-blue-600 dark:text-blue-400" /> Administrador
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                          <UserCheck size={13} className="text-slate-500" /> Usuário Padrão
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-4">
                       <span className="inline-flex rounded-lg bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
@@ -129,7 +160,7 @@ export default function UsuariosPage() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          title="Editar dados ou senha"
+                          title="Editar dados ou permissões"
                           onClick={() => setUsuarioEditando(u)}
                           className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-blue-600 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-blue-950"
                         >
@@ -156,7 +187,7 @@ export default function UsuariosPage() {
         </div>
       </Card>
 
-      {/* Modal Criar Novo Usuário (Item 15) */}
+      {/* Modal Criar Novo Usuário (Item 18) */}
       {modalNovo && (
         <ModalUsuarioForm
           titulo="Cadastrar novo usuário"
@@ -170,7 +201,7 @@ export default function UsuariosPage() {
         />
       )}
 
-      {/* Modal Editar Usuário (Item 15) */}
+      {/* Modal Editar Usuário (Item 18) */}
       {usuarioEditando && (
         <ModalUsuarioForm
           titulo="Editar usuário"
@@ -184,6 +215,23 @@ export default function UsuariosPage() {
           }}
         />
       )}
+
+      {/* Confirmação in-app (Item 8) */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Autorização de administrador (Item 18) */}
+      <AdminAuthModal
+        isOpen={adminAuthModal.isOpen}
+        actionDesc={adminAuthModal.actionDesc}
+        onSuccess={adminAuthModal.onSuccess}
+        onClose={() => setAdminAuthModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
@@ -192,6 +240,7 @@ function ModalUsuarioForm({ titulo, usuario = null, escolaId, onClose, onSuccess
   const [nome, setNome] = useState(usuario?.nome || '');
   const [email, setEmail] = useState(usuario?.email || '');
   const [senha, setSenha] = useState('');
+  const [role, setRole] = useState(usuario?.role || 'padrao');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
 
@@ -210,7 +259,7 @@ function ModalUsuarioForm({ titulo, usuario = null, escolaId, onClose, onSuccess
     setErro('');
     try {
       if (usuario) {
-        const payload = { nome: nome.trim(), email: email.trim() };
+        const payload = { nome: nome.trim(), email: email.trim(), role };
         if (senha) payload.senha = senha;
         await updateUsuario(usuario.id, payload);
       } else {
@@ -219,6 +268,7 @@ function ModalUsuarioForm({ titulo, usuario = null, escolaId, onClose, onSuccess
           nome: nome.trim(),
           email: email.trim(),
           senha,
+          role,
         });
       }
       onSuccess();
@@ -230,11 +280,11 @@ function ModalUsuarioForm({ titulo, usuario = null, escolaId, onClose, onSuccess
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900 dark:border dark:border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900 dark:border dark:border-slate-800">
         <h3 className="text-lg font-bold text-slate-900 dark:text-white">{titulo}</h3>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          {usuario ? 'Atualize as informações ou defina uma nova senha.' : 'Crie credenciais de acesso para a equipe escolar.'}
+          {usuario ? 'Atualize as informações, permissões ou defina uma nova senha.' : 'Crie credenciais e defina o nível de permissão no sistema.'}
         </p>
 
         {erro && <p className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-600 dark:bg-red-950 dark:text-red-300">{erro}</p>}
@@ -258,12 +308,31 @@ function ModalUsuarioForm({ titulo, usuario = null, escolaId, onClose, onSuccess
           />
 
           <Field
-            label={usuario ? 'Nova senha (deixe em branco para não alterar)' : 'Senha de acesso *'}
+            label={usuario ? 'Nova senha (deixe em branco para manter a atual)' : 'Senha de acesso *'}
             type="password"
             placeholder={usuario ? '••••••' : 'Mínimo 6 caracteres'}
             value={senha}
             onChange={e => setSenha(e.target.value)}
           />
+
+          {/* SELEÇÃO DO NÍVEL DE PERMISSÃO (Item 18) */}
+          <Select
+            label="Nível de Permissão"
+            required
+            value={role}
+            onChange={e => setRole(e.target.value)}
+          >
+            <option value="padrao">Usuário Padrão (Sem permissão para exclusões)</option>
+            <option value="admin">Administrador (Permissão total para todas as funções)</option>
+          </Select>
+
+          <div className="rounded-lg bg-slate-50 p-3 text-[11px] text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+            {role === 'admin' ? (
+              <p>👑 <strong>Administrador:</strong> pode realizar todas as ações no sistema, inclusive cadastrar novos administradores e gerenciar uniformes e turmas.</p>
+            ) : (
+              <p>👤 <strong>Usuário Padrão:</strong> pode registrar saídas, entradas e alunos. Ações de exclusão exigirão autorização de um administrador.</p>
+            )}
+          </div>
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
             <Button variant="secondary" type="button" onClick={onClose} className="h-9 px-4 text-xs">

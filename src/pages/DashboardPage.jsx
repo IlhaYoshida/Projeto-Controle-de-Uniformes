@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getDashboard, getEstoque } from '../api';
-import { pivotEstoque, TAMANHOS_UNIFORME } from '../data';
+import { pivotEstoque, TAMANHOS_UNIFORME, dateBR } from '../data';
 import { Card, Header } from '../components/UI';
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const NOMES_MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
 
 export default function DashboardPage() {
   const anoAtual = new Date().getFullYear();
   const [ano, setAno] = useState(anoAtual);
+  const [mes, setMes] = useState(''); // '' = Todos
   const [dash, setDash] = useState(null);
   const [estoque, setEstoque] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,18 +20,21 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([getDashboard(ano), getEstoque()])
+    const mesNum = mes ? Number(mes) : null;
+    Promise.all([getDashboard(ano, mesNum), getEstoque()])
       .then(([d, e]) => {
         setDash(d);
         setEstoque(e);
       })
       .catch(() => setErro('Não foi possível carregar o dashboard. Verifique se a API está no ar.'))
       .finally(() => setLoading(false));
-  }, [ano]);
+  }, [ano, mes]);
 
   const tiposExistentes = useMemo(() => [...new Set(estoque.map(i => i.tipo))], [estoque]);
   const pivot = useMemo(() => pivotEstoque(estoque, tiposExistentes), [estoque, tiposExistentes]);
   const anos = useMemo(() => Array.from({ length: 5 }, (_, i) => anoAtual - i), [anoAtual]);
+
+  const periodoTexto = mes ? `${NOMES_MESES[Number(mes) - 1]} de ${ano}` : `${ano}`;
 
   return (
     <div className="page-enter">
@@ -35,15 +43,29 @@ export default function DashboardPage() {
         title="Dashboard"
         subtitle="Indicadores de alunos, recebimentos e estoque de uniformes."
         actions={
-          <select
-            value={ano}
-            onChange={e => setAno(Number(e.target.value))}
-            className="h-11 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-          >
-            {anos.map(a => (
-              <option key={a} value={a}>{a}</option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={ano}
+              onChange={e => setAno(Number(e.target.value))}
+              aria-label="Selecionar Ano"
+              className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              {anos.map(a => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+            <select
+              value={mes}
+              onChange={e => setMes(e.target.value)}
+              aria-label="Selecionar Mês"
+              className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              <option value="">Todos os meses</option>
+              {NOMES_MESES.map((nomeMes, idx) => (
+                <option key={nomeMes} value={idx + 1}>{nomeMes}</option>
+              ))}
+            </select>
+          </div>
         }
       />
 
@@ -62,13 +84,13 @@ export default function DashboardPage() {
             <StatCard
               label="Receberam uniforme"
               value={dash.receberam_uniforme}
-              sub={`${dash.pct_receberam_uniforme}% dos alunos`}
+              sub={`${dash.pct_receberam_uniforme}% no período`}
               color="text-emerald-600 dark:text-emerald-400"
             />
             <StatCard
               label="Peças recebidas"
               value={dash.pecas_recebidas_no_ano}
-              sub={`Entregas registradas em ${dash.ano}`}
+              sub={`Saídas em ${periodoTexto}`}
               color="text-blue-600 dark:text-blue-400"
             />
             <StatCard label="Peças em estoque" value={dash.pecas_em_estoque} sub="Somando todos os tamanhos" />
@@ -78,19 +100,20 @@ export default function DashboardPage() {
             <Card className="p-6 lg:col-span-1">
               <h2 className="text-sm font-bold text-slate-900 dark:text-white">Uniformes recebidos no ano</h2>
               <p className="mb-6 text-xs text-slate-400">Quantidade de peças registradas por mês</p>
-              <BarChart valores={dash.uniformes_por_mes} />
+              <BarChart valores={dash.uniformes_por_mes} mesAtivo={mes ? Number(mes) - 1 : null} />
             </Card>
 
             <Card className="flex flex-col items-center p-6 lg:col-span-1">
               <h2 className="self-start text-sm font-bold text-slate-900 dark:text-white">Alunos com uniforme</h2>
-              <p className="mb-4 self-start text-xs text-slate-400">Status de recebimento em {dash.ano}</p>
+              <p className="mb-4 self-start text-xs text-slate-400">Status de recebimento em {periodoTexto}</p>
               <Donut pct={dash.pct_receberam_uniforme} receberam={dash.receberam_uniforme} total={dash.alunos_cadastrados} />
             </Card>
 
-            <Card className="p-6 lg:col-span-1">
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Mais de um uniforme</h2>
-              <p className="mb-4 text-xs text-slate-400">Alunos que já saíram com 2+ uniformes</p>
-              <RankingList itens={dash.mais_de_um_uniforme} />
+            {/* Substituído 'Mais de um uniforme' por 'Registros de saída recentes' (Item 20) */}
+            <Card className="p-6 lg:col-span-1 flex flex-col">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Registros de saída recentes</h2>
+              <p className="mb-4 text-xs text-slate-400">Últimas entregas registradas no período</p>
+              <SaidasRecentesList itens={dash.saidas_recentes} />
             </Card>
           </div>
 
@@ -142,22 +165,29 @@ function StatCard({ label, value, sub, color = 'text-slate-900 dark:text-white' 
   );
 }
 
-function BarChart({ valores }) {
+function BarChart({ valores, mesAtivo }) {
   const max = Math.max(1, ...valores);
   return (
     <div className="flex h-40 items-end gap-2">
-      {valores.map((v, i) => (
-        <div key={i} className="flex flex-1 flex-col items-center gap-2">
-          <div className="flex h-32 w-full items-end">
-            <div
-              className="w-full rounded-t-md bg-blue-500 transition-all"
-              style={{ height: `${(v / max) * 100}%`, minHeight: v ? '3px' : 0 }}
-              title={`${MESES[i]}: ${v}`}
-            />
+      {valores.map((v, i) => {
+        const isHighlight = mesAtivo === null || mesAtivo === i;
+        return (
+          <div key={i} className="flex flex-1 flex-col items-center gap-2">
+            <div className="flex h-32 w-full items-end">
+              <div
+                className={`w-full rounded-t-md transition-all ${
+                  isHighlight ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-700 opacity-40'
+                }`}
+                style={{ height: `${(v / max) * 100}%`, minHeight: v ? '3px' : 0 }}
+                title={`${MESES[i]}: ${v} peças`}
+              />
+            </div>
+            <span className={`text-[10px] ${mesAtivo === i ? 'font-bold text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>
+              {MESES[i]}
+            </span>
           </div>
-          <span className="text-[10px] text-slate-400">{MESES[i]}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -194,23 +224,50 @@ function Donut({ pct, receberam, total }) {
   );
 }
 
-function RankingList({ itens }) {
-  if (!itens?.length)
-    return <p className="py-8 text-center text-xs text-slate-400">Nenhum aluno recebeu mais de um uniforme ainda.</p>;
-  const max = Math.max(...itens.map(i => i.pecas));
+function SaidasRecentesList({ itens }) {
+  if (!itens?.length) {
+    return (
+      <div className="flex flex-1 items-center justify-center py-8 text-center text-xs text-slate-400">
+        Nenhum registro de saída encontrado para o período selecionado.
+      </div>
+    );
+  }
+
+  const horaFormatada = (dataStr) => {
+    try {
+      const d = new Date(dataStr);
+      return `${dateBR(dataStr)} às ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    } catch {
+      return dateBR(dataStr);
+    }
+  };
+
   return (
-    <div className="space-y-3">
-      {itens.map(i => (
-        <div key={i.aluno_id}>
-          <div className="mb-1 flex justify-between text-xs">
-            <span className="font-medium text-slate-700 dark:text-slate-300">{i.nome}</span>
-            <span className="font-semibold text-slate-900 dark:text-white">{i.pecas}</span>
+    <div className="space-y-3 overflow-y-auto max-h-56 pr-1 flex-1">
+      {itens.map(item => (
+        <div
+          key={item.id}
+          className="rounded-lg border border-slate-100 bg-slate-50/70 p-3 transition hover:bg-slate-100/70 dark:border-slate-800 dark:bg-slate-800/50 dark:hover:bg-slate-800"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white">{item.aluno}</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                Turma: {item.turma} · {horaFormatada(item.data_entrega)}
+              </div>
+            </div>
+            <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300 shrink-0">
+              {item.quantidade} un.
+            </span>
           </div>
-          <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
-            <div className="h-2 rounded-full bg-[#2563eb]" style={{ width: `${(i.pecas / max) * 100}%` }} />
-          </div>
+          {item.pecas && (
+            <div className="mt-1.5 truncate text-[10px] text-slate-600 dark:text-slate-400" title={item.pecas}>
+              {item.pecas}
+            </div>
+          )}
         </div>
       ))}
     </div>
   );
 }
+

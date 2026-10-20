@@ -56,6 +56,14 @@ def _enriquecer_aluno(aluno: models.Aluno, db: Session) -> schemas.AlunoOut:
         if tamanho_derivado:
             break
 
+    import json
+    tamanhos_dict = None
+    if aluno.tamanhos_uniforme:
+        try:
+            tamanhos_dict = json.loads(aluno.tamanhos_uniforme)
+        except Exception:
+            tamanhos_dict = None
+
     return schemas.AlunoOut(
         id=aluno.id,
         escola_id=aluno.escola_id,
@@ -74,6 +82,7 @@ def _enriquecer_aluno(aluno: models.Aluno, db: Session) -> schemas.AlunoOut:
         escola=escola.nome if escola else None,
         idade=_calcular_idade(aluno.data_nascimento),
         tamanho=aluno.tamanho_camiseta or tamanho_derivado or "—",
+        tamanhos_uniforme=tamanhos_dict,
         recebidos=len(entregas),
     )
 
@@ -123,7 +132,14 @@ def criar_aluno(aluno: schemas.AlunoCreate, db: Session = Depends(get_db)):
     if not turma:
         raise HTTPException(status_code=404, detail="Turma informada não existe")
 
+    import json
     dados = aluno.model_dump()
+    if dados.get("tamanhos_uniforme"):
+        t_dict = dados["tamanhos_uniforme"]
+        dados["tamanhos_uniforme"] = json.dumps(t_dict)
+        if not dados.get("tamanho_camiseta") and "Camiseta" in t_dict:
+            dados["tamanho_camiseta"] = t_dict["Camiseta"]
+
     novo_aluno = models.Aluno(**dados)
     db.add(novo_aluno)
     try:
@@ -139,6 +155,7 @@ def criar_aluno(aluno: schemas.AlunoCreate, db: Session = Depends(get_db)):
 @router.put("/{aluno_id}", response_model=schemas.AlunoOut)
 def atualizar_aluno(aluno_id: int, dados: schemas.AlunoUpdate, db: Session = Depends(get_db)):
     """ Atualiza os dados de um aluno já cadastrado """
+    import json
     aluno = db.query(models.Aluno).filter(models.Aluno.id == aluno_id).first()
     if not aluno:
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
@@ -148,7 +165,13 @@ def atualizar_aluno(aluno_id: int, dados: schemas.AlunoUpdate, db: Session = Dep
         if not turma:
             raise HTTPException(status_code=404, detail="Turma informada não existe")
 
-    for campo, valor in dados.model_dump(exclude_unset=True).items():
+    dump = dados.model_dump(exclude_unset=True)
+    if "tamanhos_uniforme" in dump and dump["tamanhos_uniforme"] is not None:
+        dump["tamanhos_uniforme"] = json.dumps(dump["tamanhos_uniforme"])
+        if not dump.get("tamanho_camiseta") and isinstance(dados.tamanhos_uniforme, dict) and "Camiseta" in dados.tamanhos_uniforme:
+            dump["tamanho_camiseta"] = dados.tamanhos_uniforme["Camiseta"]
+
+    for campo, valor in dump.items():
         setattr(aluno, campo, valor)
 
     try:

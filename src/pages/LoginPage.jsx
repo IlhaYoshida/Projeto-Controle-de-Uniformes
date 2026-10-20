@@ -10,8 +10,8 @@ export default function LoginPage({ onLoginSuccess }) {
   const [processando, setProcessando] = useState(false);
 
   // Form de Login
-  const [email, setEmail] = useState('admin@escola.gov.br');
-  const [senha, setSenha] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [senha, setSenha] = useState('');
 
   // Form de Setup / Novo Admin
   const [escolaNome, setEscolaNome] = useState('Escola Municipal Central');
@@ -107,11 +107,13 @@ export default function LoginPage({ onLoginSuccess }) {
 
       <div className="w-full max-w-md z-10">
         <div className="text-center mb-8">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-500/30 mb-3">
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-500/30 mb-3 ring-4 ring-blue-500/20">
             <School size={28} />
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-white">UNIFORME+</h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <h1 className="text-3xl font-black tracking-tight text-white drop-shadow">
+            Uniforme <span className="text-blue-400">Plus</span>
+          </h1>
+          <p className="text-xs text-slate-300 mt-1 font-medium">
             {isSetup
               ? 'Configuração inicial da escola e usuário administrador'
               : escolaCadastradaNome
@@ -120,7 +122,8 @@ export default function LoginPage({ onLoginSuccess }) {
           </p>
         </div>
 
-        <Card className="p-7 shadow-2xl border-slate-800 bg-[#111827]">
+        {/* Card com modo escuro fixo nas abas e formulários (Item 2) */}
+        <div className="rounded-2xl border border-slate-700/80 bg-[#111827] p-7 shadow-2xl text-slate-100">
           {erro && (
             <p className="mb-5 rounded-lg bg-red-950/70 border border-red-800 p-3 text-xs text-red-300">
               {erro}
@@ -129,7 +132,7 @@ export default function LoginPage({ onLoginSuccess }) {
 
           {isSetup ? (
             /* CONFIGURAÇÃO INICIAL / CADASTRO DE ADMINISTRADOR */
-            <form onSubmit={handleSetup} className="space-y-4">
+            <form onSubmit={handleSetup} className="space-y-4 [&_span]:text-slate-200 [&_input]:bg-slate-900/90 [&_input]:border-slate-700 [&_input]:text-white [&_input]:placeholder:text-slate-500">
               <div className="border-b border-slate-800 pb-3">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
                   Dados da Escola
@@ -195,20 +198,20 @@ export default function LoginPage({ onLoginSuccess }) {
                 <button
                   type="button"
                   onClick={() => { setIsSetup(false); setErro(''); }}
-                  className="w-full text-center text-xs text-slate-400 hover:text-white pt-2"
+                  className="w-full text-center text-xs text-slate-400 hover:text-white pt-2 transition"
                 >
-                  Já possui um usuário cadastrado? <b>Fazer login</b>
+                  Já possui um usuário cadastrado? <b className="text-blue-400">Fazer login</b>
                 </button>
               </div>
             </form>
           ) : (
             /* TELA DE LOGIN */
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4 [&_span]:text-slate-200 [&_input]:bg-slate-900/90 [&_input]:border-slate-700 [&_input]:text-white [&_input]:placeholder:text-slate-500">
               <Field
                 label="E-mail de acesso"
                 required
                 type="email"
-                placeholder="admin@escola.gov.br"
+                placeholder="seu.email@escola.gov.br"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
               />
@@ -222,17 +225,7 @@ export default function LoginPage({ onLoginSuccess }) {
                 onChange={e => setSenha(e.target.value)}
               />
 
-              {/* Dica de Acesso Rápido */}
-              <div className="rounded-lg border border-blue-900/50 bg-blue-950/20 p-3 text-[11px] text-blue-300 flex items-start gap-2">
-                <KeyRound size={15} className="mt-0.5 text-blue-400 shrink-0" />
-                <div>
-                  <b>Credenciais padrão para teste:</b>
-                  <div className="text-slate-300 mt-0.5">E-mail: <code className="text-blue-300">admin@escola.gov.br</code></div>
-                  <div className="text-slate-300">Senha: <code className="text-blue-300">admin123</code></div>
-                </div>
-              </div>
-
-              <div className="pt-2 space-y-2">
+              <div className="pt-3 space-y-2">
                 <Button type="submit" disabled={processando} className="w-full h-11">
                   {processando ? 'Entrando...' : 'Entrar no sistema'}
                 </Button>
@@ -242,12 +235,12 @@ export default function LoginPage({ onLoginSuccess }) {
                   onClick={() => { setIsSetup(true); setErro(''); }}
                   className="w-full text-center text-xs text-slate-400 hover:text-blue-400 pt-2 transition"
                 >
-                  Primeiro acesso ou deseja criar outro administrador? <b>Clique aqui</b>
+                  Primeiro acesso ou deseja criar outro administrador? <b className="text-blue-400">Clique aqui</b>
                 </button>
               </div>
             </form>
           )}
-        </Card>
+        </div>
       </div>
     </div>
   );
