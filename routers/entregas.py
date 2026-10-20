@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from database import get_db
+from logger import registrar_log
 
 router = APIRouter(prefix="/entregas", tags=["Entregas"])
 
@@ -83,16 +84,14 @@ def registrar_entrega(entrega: schemas.EntregaCreate, db: Session = Depends(get_
             ))
             pecas[item.item_uniforme_id].quantidade_estoque -= item.quantidade_entregue
 
-        # 4. Mantém os campos "achatados" do aluno em dia (ver models.Aluno):
-        # toda entrega marca o uniforme como Recebido, e se uma camiseta fez
-        # parte da entrega, atualiza o tamanho registrado do aluno também.
-        aluno.situacao_uniforme = "Recebido"
+        # Atualiza o tamanho da camiseta do aluno se uma camiseta fez parte da entrega
         for peca in pecas.values():
             if peca.tipo == "Camiseta":
                 aluno.tamanho_camiseta = peca.tamanho
 
         db.commit()
         db.refresh(nova_entrega)
+        registrar_log("REGISTRAR_SAIDA", f"Saída registrada para aluno '{aluno.nome}' (id={aluno.id}), {len(entrega.itens)} item(ns)")
         return _serializar_entrega(nova_entrega, db)
 
     except HTTPException:

@@ -9,8 +9,21 @@ load_dotenv()
 
 # Pega a URL do banco. O Render às vezes usa 'postgres://', o SQLAlchemy exige 'postgresql://'
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
-if SQLALCHEMY_DATABASE_URL and SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
-    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+if SQLALCHEMY_DATABASE_URL:
+    if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+        SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+    # Se a URL for genérica postgresql:// e psycopg (v3) não estiver disponível,
+    # faz fallback automático para psycopg2 para evitar erro ModuleNotFoundError: No module named 'psycopg'
+    if SQLALCHEMY_DATABASE_URL.startswith("postgresql://") and not SQLALCHEMY_DATABASE_URL.startswith("postgresql+"):
+        try:
+            import psycopg  # noqa: F401
+        except ImportError:
+            try:
+                import psycopg2  # noqa: F401
+                SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+            except ImportError:
+                pass
 
 # Cria o "motor" do banco
 engine = create_engine(SQLALCHEMY_DATABASE_URL)

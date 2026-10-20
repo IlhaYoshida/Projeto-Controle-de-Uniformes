@@ -12,7 +12,7 @@ router = APIRouter(prefix="/relatorios", tags=["Relatórios"])
 
 
 def _montar_relatorio(db: Session) -> list[schemas.RelatorioEntregaTurma]:
-    turmas = db.query(models.Turma).all()
+    turmas = db.query(models.Turma).order_by(models.Turma.nome).all()
     linhas = []
 
     for turma in turmas:
@@ -34,7 +34,7 @@ def _montar_relatorio(db: Session) -> list[schemas.RelatorioEntregaTurma]:
 
         linhas.append(schemas.RelatorioEntregaTurma(
             turma_id=turma.id,
-            serie=turma.serie,
+            turma_nome=turma.nome,
             total_alunos=len(alunos),
             total_alunos_com_entrega=len(alunos_com_entrega),
             total_entregas=len(entregas),
@@ -46,7 +46,7 @@ def _montar_relatorio(db: Session) -> list[schemas.RelatorioEntregaTurma]:
 
 @router.get("/entregas-por-turma", response_model=list[schemas.RelatorioEntregaTurma])
 def relatorio_entregas_por_turma(db: Session = Depends(get_db)):
-    """ Relatório de entregas agregado por turma (Sprint 4) """
+    """ Relatório de entregas agregado por turma """
     return _montar_relatorio(db)
 
 
@@ -57,10 +57,10 @@ def relatorio_entregas_por_turma_csv(db: Session = Depends(get_db)):
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["turma_id", "serie", "total_alunos", "total_alunos_com_entrega", "total_entregas", "total_pecas_entregues"])
+    writer.writerow(["turma_id", "turma_nome", "total_alunos", "total_alunos_com_entrega", "total_entregas", "total_pecas_entregues"])
     for linha in linhas:
         writer.writerow([
-            linha.turma_id, linha.serie, linha.total_alunos,
+            linha.turma_id, linha.turma_nome, linha.total_alunos,
             linha.total_alunos_com_entrega, linha.total_entregas, linha.total_pecas_entregues,
         ])
     buffer.seek(0)
@@ -69,6 +69,70 @@ def relatorio_entregas_por_turma_csv(db: Session = Depends(get_db)):
         buffer,
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=relatorio_entregas_por_turma.csv"},
+    )
+
+
+@router.get("/completo", response_model=schemas.RelatorioCompleto)
+def relatorio_completo(ano: int | None = None, db: Session = Depends(get_db)):
+    """Relatório completo com dados de todas as turmas e resumo mensal por ano."""
+    ano = ano or date.today().year
+    turmas_rel = _montar_relatorio(db)
+
+    alunos = db.query(models.Aluno).all()
+    total_alunos = len(alunos)
+    alunos_com_entrega_ids = {e.aluno_id for e in db.query(models.Entrega).all()}
+    receberam = sum(1 for a in alunos if a.id in alunos_com_entrega_ids)
+    pct = round((receberam / total_alunos) * 100, 1) if total_alunos else 0.0
+
+    pecas_em_estoque = db.query(models.ItemUniforme).all()
+    total_estoque = sum(i.quantidade_estoque for i in pecas_em_estoque)
+
+    # Entradas do ano
+    lotes = db.query(models.Lote).all()
+    total_entradas_ano = 0
+    entradas_mes = [0] * 12
+    for lote in lotes:
+        if lote.data_recebimento and lote.data_recebimento.year == ano:
+            itens_lote = db.query(models.ItemLote).filter(models.ItemLote.lote_id == lote.id).all()
+            qtd = sum(i.quantidade for i in itens_lote)
+            total_entradas_ano += qtd
+            entradas_mes[lote.data_recebimento.month - 1] += qtd
+
+    # Entregas / saídas do ano
+    entregas = db.query(models.Entrega).all()
+    saidas_mes = [0] * 12
+    entregas_count_mes = [0] * 12
+    total_pecas_entregues = 0
+    for entrega in entregas:
+        itens = db.query(models.ItemEntrega).filter(models.ItemEntrega.entrega_id == entrega.id).all()
+        qtd = sum(i.quantidade_entregue for i in itens)
+        total_pecas_entregues += qtd
+        if entrega.data_entrega and entrega.data_entrega.year == ano:
+            saidas_mes[entrega.data_entrega.month - 1] += qtd
+            entregas_count_mes[entrega.data_entrega.month - 1] += 1
+
+    nomes_meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    meses_rel = [
+        schemas.RelatorioMensal(
+            mes=m + 1,
+            nome_mes=nomes_meses[m],
+            entradas_pecas=entradas_mes[m],
+            saidas_pecas=saidas_mes[m],
+            entregas_realizadas=entregas_count_mes[m]
+        )
+        for m in range(12)
+    ]
+
+    return schemas.RelatorioCompleto(
+        ano=ano,
+        total_alunos=total_alunos,
+        total_alunos_com_entrega=receberam,
+        pct_alunos_com_entrega=pct,
+        total_pecas_entregues=total_pecas_entregues,
+        total_pecas_em_estoque=total_estoque,
+        total_entradas_ano=total_entradas_ano,
+        turmas=turmas_rel,
+        meses=meses_rel
     )
 
 
@@ -83,7 +147,8 @@ def dashboard(ano: int | None = None, db: Session = Depends(get_db)):
 
     alunos = db.query(models.Aluno).all()
     total_alunos = len(alunos)
-    receberam = sum(1 for a in alunos if a.situacao_uniforme == "Recebido")
+    alunos_com_entrega_ids = {e.aluno_id for e in db.query(models.Entrega).all()}
+    receberam = sum(1 for a in alunos if a.id in alunos_com_entrega_ids)
     pct = round((receberam / total_alunos) * 100, 1) if total_alunos else 0.0
 
     pecas_em_estoque = db.query(models.ItemUniforme).all()
