@@ -45,6 +45,7 @@ class UsuarioBase(BaseModel):
     escola_id: int
     nome: str
     email: str
+    role: Optional[str] = "admin"  # 'admin' ou 'padrao'
 
 class UsuarioCreate(UsuarioBase):
     senha: str = Field(min_length=6, description="Enviada em texto puro pelo cliente; o backend faz o hash antes de salvar.")
@@ -54,15 +55,22 @@ class UsuarioUpdate(BaseModel):
     nome: Optional[str] = None
     email: Optional[str] = None
     senha: Optional[str] = Field(default=None, min_length=6)
+    role: Optional[str] = None
 
 class UsuarioOut(UsuarioBase):
     """Nunca inclui a senha (nem o hash) na resposta."""
     model_config = ConfigDict(from_attributes=True)
     id: int
+    role: str = "admin"
 
 class LoginRequest(BaseModel):
     email: str
     senha: str
+
+class AutorizarAdminRequest(BaseModel):
+    email: str
+    senha: str
+    acao: Optional[str] = None
 
 
 # ============================================================
@@ -80,8 +88,13 @@ class AlunoBase(BaseModel):
     email_pai: Optional[str] = None
     telefone_mae: Optional[str] = None
     email_mae: Optional[str] = None
+    tamanhos_uniforme: Optional[dict[str, str]] = None
 
 class AlunoCreate(AlunoBase):
+    matricula: str
+    data_nascimento: Optional[date] = None
+    nome_pai: Optional[str] = None
+    nome_mae: Optional[str] = None
     tamanho_camiseta: Optional[str] = None
 
 class AlunoUpdate(BaseModel):
@@ -97,6 +110,7 @@ class AlunoUpdate(BaseModel):
     telefone_mae: Optional[str] = None
     email_mae: Optional[str] = None
     tamanho_camiseta: Optional[str] = None
+    tamanhos_uniforme: Optional[dict[str, str]] = None
 
 class AlunoOut(AlunoBase):
     """
@@ -117,6 +131,7 @@ class AlunoOut(AlunoBase):
     escola: Optional[str] = None
     idade: Optional[int] = None
     tamanho: Optional[str] = None
+    tamanhos_uniforme: Optional[dict[str, str]] = None
     recebidos: int = 0
 
 
@@ -131,8 +146,25 @@ class ItemEntrada(BaseModel):
 class EntradaUniformeCreate(BaseModel):
     escola_id: int
     usuario_id: int
+    data_recebimento: Optional[date] = None
     nota_fiscal: Optional[str] = None
     itens: List[ItemEntrada]
+
+class LoteItemDetalhe(BaseModel):
+    id: int
+    tipo: str
+    tamanho: str
+    quantidade: int
+
+class LoteDetalhadoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    data_recebimento: datetime
+    nota_fiscal: Optional[str] = None
+    escola: Optional[str] = None
+    responsavel: Optional[str] = None
+    itens: List[LoteItemDetalhe] = []
+    total_pecas: int = 0
 
 class LoteOut(BaseModel):
     """ Uma linha do histórico de entradas (tela 'Entradas' dentro de Uniformes). """
@@ -253,6 +285,7 @@ class RankingAluno(BaseModel):
 
 class DashboardOut(BaseModel):
     ano: int
+    mes: Optional[int] = None
     alunos_cadastrados: int
     receberam_uniforme: int
     pct_receberam_uniforme: float
@@ -260,3 +293,4 @@ class DashboardOut(BaseModel):
     pecas_em_estoque: int
     uniformes_por_mes: List[int]  # 12 posições, jan..dez
     mais_de_um_uniforme: List[RankingAluno]
+    saidas_recentes: List[EntregaResumoOut] = []

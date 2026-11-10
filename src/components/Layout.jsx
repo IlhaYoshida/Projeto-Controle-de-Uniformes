@@ -26,8 +26,7 @@ const navPrincipal = [
 
 const navGerenciamento = [
   { label: 'Relatórios', icon: FileBarChart, to: '/relatorios' },
-  { label: 'Usuários', icon: UserCheck, to: '/usuarios' }, // Item 15
-  { label: 'Logs do Sistema', icon: FileText, to: '/logs' }, // Item 6
+  { label: 'Usuários', icon: UserCheck, to: '/usuarios' },
 ];
 
 function Sidebar({ close, currentUser, onLogout, darkMode, toggleDarkMode }) {
@@ -48,24 +47,31 @@ function Sidebar({ close, currentUser, onLogout, darkMode, toggleDarkMode }) {
     </NavLink>
   );
 
+  const isAdmin = currentUser?.role === 'admin' || !currentUser?.role;
+
   return (
     <aside className="flex h-full w-[240px] flex-col justify-between bg-[#0d1729] px-4 py-6 text-white border-r border-slate-800">
       <div>
-        {/* CABEÇALHO DA SIDEBAR COM NOME DO USUÁRIO CONECTADO (Item 15) */}
+        {/* CABEÇALHO DA SIDEBAR COM NOME DO USUÁRIO CONECTADO */}
         <div className="mb-6 px-3">
           <div className="text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-xs font-black">U+</span>
-            UNIFORME+
+            Uniforme Plus
           </div>
           <div className="mt-1 text-[10px] text-slate-400">Sistema de controle escolar</div>
 
-          {/* Nome do usuário exibido sempre abaixo de "Sistema de controle escolar" (Item 15) */}
+          {/* Nome do usuário e nível de permissão */}
           <div className="mt-3.5 flex items-center gap-2.5 rounded-lg border border-slate-800 bg-[#162138] px-3 py-2">
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600/30 text-blue-400">
               <User size={13} />
             </div>
-            <div className="overflow-hidden">
-              <div className="text-[10px] text-slate-400">Conectado como</div>
+            <div className="overflow-hidden flex-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] text-slate-400">Conectado como</span>
+                <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${isAdmin ? 'bg-blue-900/60 text-blue-300' : 'bg-slate-700 text-slate-300'}`}>
+                  {isAdmin ? 'ADMIN' : 'PADRÃO'}
+                </span>
+              </div>
               <div className="truncate text-xs font-bold text-slate-100" title={currentUser?.nome}>
                 {currentUser?.nome || 'Usuário'}
               </div>

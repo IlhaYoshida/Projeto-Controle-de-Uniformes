@@ -86,6 +86,12 @@ def excluir_item_uniforme(item_id: int, db: Session = Depends(get_db)):
     if not item:
         raise HTTPException(status_code=404, detail="Item de uniforme não encontrado")
 
+    if item.quantidade_estoque > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Não é possível remover o tamanho '{item.tamanho}': há {item.quantidade_estoque} unidade(s) em estoque."
+        )
+
     entregas_vinculadas = db.query(models.ItemEntrega).filter(models.ItemEntrega.item_uniforme_id == item_id).count()
     if entregas_vinculadas:
         raise HTTPException(

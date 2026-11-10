@@ -1,17 +1,20 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, Plus, Edit2, Trash2, CheckCircle2, Clock, Sparkles, ChevronRight, PieChart as PieIcon, BarChart2 } from 'lucide-react';
 import { getTurmas, createTurma, updateTurma, deleteTurma, getEstatisticasTurma, getAlunosDaTurma, deleteAluno } from '../api';
 import { useApp } from '../App';
-import { Button, Card, Header, Field, Empty, Badge } from '../components/UI';
+import { Button, Card, Header, Field, Empty, Badge, ConfirmModal, AdminAuthModal } from '../components/UI';
 import { initials } from '../data';
 
 export default function TurmasPage() {
   const navigate = useNavigate();
-  const { escolaId, recarregar } = useApp();
+  const [searchParams] = useSearchParams();
+  const turmaParamId = searchParams.get('turma_id');
+
+  const { escolaId, recarregar, currentUser } = useApp();
   const [turmas, setTurmas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [turmaSelecionadaId, setTurmaSelecionadaId] = useState(null);
+  const [turmaSelecionadaId, setTurmaSelecionadaId] = useState(turmaParamId ? Number(turmaParamId) : null);
   const [stats, setStats] = useState(null);
   const [alunosTurma, setAlunosTurma] = useState([]);
   const [loadingDetalhes, setLoadingDetalhes] = useState(false);
@@ -22,13 +25,33 @@ export default function TurmasPage() {
   const [erro, setErro] = useState('');
   const [mensagemSucesso, setMensagemSucesso] = useState('');
 
+  // Modais de confirmação e RBAC
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+  const [adminAuthModal, setAdminAuthModal] = useState({ isOpen: false, actionDesc: '', onSuccess: null });
+
+  const executarAcaoSegura = (actionDesc, onPermitido) => {
+    if (currentUser?.role === 'padrao') {
+      setAdminAuthModal({
+        isOpen: true,
+        actionDesc,
+        onSuccess: onPermitido,
+      });
+    } else {
+      onPermitido();
+    }
+  };
+
   const carregarTurmas = async () => {
     setLoading(true);
     try {
       const data = await getTurmas();
       setTurmas(data);
-      if (data.length > 0 && !turmaSelecionadaId) {
-        setTurmaSelecionadaId(data[0].id);
+      if (data.length > 0) {
+        if (turmaParamId && data.some(t => String(t.id) === String(turmaParamId))) {
+          setTurmaSelecionadaId(Number(turmaParamId));
+        } else if (!turmaSelecionadaId) {
+          setTurmaSelecionadaId(data[0].id);
+        }
       }
     } catch {
       setErro('Não foi possível carregar as turmas.');
@@ -39,7 +62,7 @@ export default function TurmasPage() {
 
   useEffect(() => {
     carregarTurmas();
-  }, []);
+  }, [turmaParamId]); // eslint-disable-line
 
   // Carrega estatísticas e alunos da turma selecionada
   useEffect(() => {
@@ -67,17 +90,12 @@ export default function TurmasPage() {
   const sugestoesInteligentes = useMemo(() => {
     const nomesExistentes = turmas.map(t => t.nome.trim());
 
-    // Se tiver menos de 2 turmas, sugere padrão fundamental inicial
     if (turmas.length < 2) {
       const padraoInicial = ['1º A', '1º B', '2º A', '2º B', '3º A', '3º B', '4º A', '4º B', '5º A', '5º B'];
       return padraoInicial.filter(n => !nomesExistentes.includes(n));
     }
 
-    // Identifica o padrão a partir das turmas inseridas
     const sugestoes = new Set();
-
-    // Extrai números e letras das turmas existentes
-    // Regex para extrair (ex: "5º A" ou "5 A" ou "1 Ano A")
     const parsed = turmas.map(t => {
       const matchNum = t.nome.match(/(\d+)/);
       const matchLetra = t.nome.match(/([A-Za-z])$/);
@@ -89,7 +107,6 @@ export default function TurmasPage() {
     }).filter(p => p.num !== null);
 
     if (parsed.length >= 2) {
-      // 1. Padrão de letras na mesma série (ex: tem 5º A e 5º B -> sugere 5º C, 5º D)
       const porSerie = {};
       parsed.forEach(p => {
         if (!porSerie[p.num]) porSerie[p.num] = [];
@@ -107,7 +124,6 @@ export default function TurmasPage() {
         }
       });
 
-      // 2. Padrão de incremento de séries (ex: tem 5º A e 6º A -> sugere 7º A, 8º A, 9º A)
       const letrasUnicas = [...new Set(parsed.map(p => p.letra).filter(Boolean))];
       letrasUnicas.forEach(letra => {
         const seriesComEssaLetra = parsed.filter(p => p.letra === letra).map(p => p.num).sort((a, b) => a - b);
@@ -121,7 +137,6 @@ export default function TurmasPage() {
         }
       });
 
-      // 3. Padrão geral de séries escolares brasileiras comuns
       const todasSeries = parsed.map(p => p.num);
       const maxGeral = Math.max(...todasSeries);
       if (maxGeral < 9) {
@@ -160,32 +175,50 @@ export default function TurmasPage() {
     }
   };
 
-  const handleExcluirTurma = async (id, nome) => {
-    if (!window.confirm(`Tem certeza que deseja excluir a turma "${nome}"?`)) return;
-    try {
-      await deleteTurma(id);
-      setMensagemSucesso(`Turma "${nome}" excluída.`);
-      if (turmaSelecionadaId === id) setTurmaSelecionadaId(null);
-      await carregarTurmas();
-      await recarregar();
-    } catch (err) {
-      setErro(err.message || 'Não foi possível excluir a turma.');
-    }
+  const handleExcluirTurma = (id, nome) => {
+    executarAcaoSegura(`excluir a turma "${nome}"`, () => {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Excluir Turma',
+        message: `Tem certeza que deseja excluir a turma "${nome}"? Esta ação removerá a turma da escola.`,
+        onConfirm: async () => {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          try {
+            await deleteTurma(id);
+            setMensagemSucesso(`Turma "${nome}" excluída.`);
+            if (turmaSelecionadaId === id) setTurmaSelecionadaId(null);
+            await carregarTurmas();
+            await recarregar();
+          } catch (err) {
+            setErro(err.message || 'Não foi possível excluir a turma.');
+          }
+        },
+      });
+    });
   };
 
-  const handleExcluirAlunoDaTurma = async (alunoId, alunoNome) => {
-    if (!window.confirm(`Tem certeza que deseja remover o aluno "${alunoNome}"?`)) return;
-    try {
-      await deleteAluno(alunoId);
-      setAlunosTurma(prev => prev.filter(a => a.id !== alunoId));
-      if (turmaSelecionadaId) {
-        const est = await getEstatisticasTurma(turmaSelecionadaId);
-        setStats(est);
-      }
-      await recarregar();
-    } catch (err) {
-      alert(err.message || 'Erro ao remover aluno.');
-    }
+  const handleExcluirAlunoDaTurma = (alunoId, alunoNome) => {
+    executarAcaoSegura(`remover o aluno "${alunoNome}"`, () => {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Remover Aluno',
+        message: `Tem certeza que deseja remover o aluno "${alunoNome}" do sistema?`,
+        onConfirm: async () => {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          try {
+            await deleteAluno(alunoId);
+            setAlunosTurma(prev => prev.filter(a => a.id !== alunoId));
+            if (turmaSelecionadaId) {
+              const est = await getEstatisticasTurma(turmaSelecionadaId);
+              setStats(est);
+            }
+            await recarregar();
+          } catch (err) {
+            setErro(err.message || 'Erro ao remover aluno.');
+          }
+        },
+      });
+    });
   };
 
   const turmaAtual = turmas.find(t => t.id === turmaSelecionadaId);
@@ -456,7 +489,10 @@ export default function TurmasPage() {
                       {alunosTurma.length} alunos cadastrados no {turmaAtual.nome}
                     </p>
                   </div>
-                  <Button onClick={() => navigate('/alunos/novo')} className="h-8 px-3 text-xs">
+                  <Button
+                    onClick={() => navigate(`/alunos/novo?turma_id=${turmaAtual.id}&origem=turmas`)}
+                    className="h-8 px-3 text-xs"
+                  >
                     <Plus size={14} /> Adicionar aluno à turma
                   </Button>
                 </div>
@@ -565,6 +601,22 @@ export default function TurmasPage() {
           }}
         />
       )}
+      {/* Confirmação in-app (Item 8) */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Autorização de administrador (Item 18) */}
+      <AdminAuthModal
+        isOpen={adminAuthModal.isOpen}
+        actionDesc={adminAuthModal.actionDesc}
+        onSuccess={adminAuthModal.onSuccess}
+        onClose={() => setAdminAuthModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

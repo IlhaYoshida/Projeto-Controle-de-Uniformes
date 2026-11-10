@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useApp } from '../App';
-import { getTurmas } from '../api';
-import { TAMANHOS_UNIFORME } from '../data';
-import { Back, Button, Card, Field, Header, Select } from '../components/UI';
+import { getTurmas, getEstoque } from '../api';
+import { TAMANHOS_UNIFORME, dateBR } from '../data';
+import { Back, Button, Card, Field, Header, Select, ReviewModal } from '../components/UI';
 
 const emptyForm = {
   nome: '',
@@ -17,6 +17,7 @@ const emptyForm = {
   telefone_mae: '',
   email_mae: '',
   tamanho_camiseta: '',
+  tamanhos_uniforme: {},
 };
 
 // FormField definido FORA do componente principal para evitar recriação e perda de foco ao digitar
@@ -46,23 +47,47 @@ function Section({ title, children }) {
 
 export default function StudentFormPage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const turmaIdParam = searchParams.get('turma_id');
+  const origemParam = searchParams.get('origem');
+
   const editing = Boolean(id);
   const { students, addStudent, updateStudent, escolaId } = useApp();
   const navigate = useNavigate();
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
   const [turmas, setTurmas] = useState([]);
+  const [tiposUniforme, setTiposUniforme] = useState(['Camiseta', 'Bermuda', 'Calça']);
   const [saving, setSaving] = useState(false);
   const [erroGeral, setErroGeral] = useState('');
+  const [modalRevisao, setModalRevisao] = useState(false);
 
   const alunoAtual = editing ? students.find(s => String(s.id) === id) : null;
 
   useEffect(() => {
     getTurmas().then(setTurmas).catch(() => setTurmas([]));
+    getEstoque()
+      .then(itens => {
+        const tipos = [...new Set(itens.map(i => i.tipo))];
+        if (tipos.length) setTiposUniforme(tipos);
+      })
+      .catch(() => {});
   }, []);
+
+  // Se veio da aba Turmas (Item 17), pré-seleciona a turma
+  useEffect(() => {
+    if (!editing && turmaIdParam) {
+      setForm(f => ({ ...f, turma_id: turmaIdParam }));
+    }
+  }, [editing, turmaIdParam]);
 
   useEffect(() => {
     if (editing && alunoAtual) {
+      const tamanhosMap = { ...(alunoAtual.tamanhos_uniforme || {}) };
+      if (alunoAtual.tamanho_camiseta && !tamanhosMap.Camiseta) {
+        tamanhosMap.Camiseta = alunoAtual.tamanho_camiseta;
+      }
+
       setForm({
         nome: alunoAtual.nome || '',
         matricula: alunoAtual.matricula || '',
@@ -75,6 +100,7 @@ export default function StudentFormPage() {
         telefone_mae: alunoAtual.telefone_mae || '',
         email_mae: alunoAtual.email_mae || '',
         tamanho_camiseta: alunoAtual.tamanho_camiseta || '',
+        tamanhos_uniforme: tamanhosMap,
       });
     }
   }, [editing, alunoAtual]);
@@ -82,9 +108,18 @@ export default function StudentFormPage() {
   // Validação em tempo real ao alterar valores
   const change = (campo, valor) => {
     setForm(f => ({ ...f, [campo]: valor }));
-
-    // Limpa erro do campo alterado
     setErrors(e => ({ ...e, [campo]: '' }));
+  };
+
+  const changeTamanhoUniforme = (tipo, tamanho) => {
+    setForm(f => {
+      const novoMap = { ...f.tamanhos_uniforme, [tipo]: tamanho };
+      return {
+        ...f,
+        tamanhos_uniforme: novoMap,
+        tamanho_camiseta: tipo === 'Camiseta' ? tamanho : f.tamanho_camiseta,
+      };
+    });
   };
 
   const hoje = new Date().toISOString().slice(0, 10);
@@ -107,7 +142,6 @@ export default function StudentFormPage() {
     } else if (!/^\d+$/.test(form.matricula.trim())) {
       next.matricula = 'A matrícula deve conter apenas números';
     } else {
-      // Verifica duplicação de matrícula no frontend
       const matriculaDuplicada = students.some(
         s => String(s.matricula).trim() === form.matricula.trim() && (!editing || String(s.id) !== id)
       );
@@ -116,11 +150,11 @@ export default function StudentFormPage() {
       }
     }
 
-    // 3. Data de nascimento (não permitir data futura)
-    if (form.data_nascimento) {
-      if (form.data_nascimento > hoje) {
-        next.data_nascimento = 'A data de nascimento não pode ser no futuro';
-      }
+    // 3. Data de nascimento (obrigatória - Item 6; não pode ser futura)
+    if (!form.data_nascimento) {
+      next.data_nascimento = 'A data de nascimento é obrigatória';
+    } else if (form.data_nascimento > hoje) {
+      next.data_nascimento = 'A data de nascimento não pode ser no futuro';
     }
 
     // 4. Turma (obrigatória)
@@ -128,14 +162,22 @@ export default function StudentFormPage() {
       next.turma_id = 'Selecione a turma do aluno';
     }
 
-    // 5. Nome do pai (sem números)
-    if (form.nome_pai && /\d/.test(form.nome_pai)) {
+    // 5. Nome do pai (obrigatório - Item 6, sem números)
+    if (!form.nome_pai.trim()) {
+      next.nome_pai = 'O nome do pai é obrigatório';
+    } else if (/\d/.test(form.nome_pai)) {
       next.nome_pai = 'O nome do pai não pode conter números';
+    } else if (form.nome_pai.trim().length < 3) {
+      next.nome_pai = 'Digite o nome completo do pai';
     }
 
-    // 6. Nome da mãe (sem números)
-    if (form.nome_mae && /\d/.test(form.nome_mae)) {
+    // 6. Nome da mãe (obrigatório - Item 6, sem números)
+    if (!form.nome_mae.trim()) {
+      next.nome_mae = 'O nome da mãe é obrigatório';
+    } else if (/\d/.test(form.nome_mae)) {
       next.nome_mae = 'O nome da mãe não pode conter números';
+    } else if (form.nome_mae.trim().length < 3) {
+      next.nome_mae = 'Digite o nome completo da mãe';
     }
 
     // 7. Emails válidos
@@ -159,19 +201,27 @@ export default function StudentFormPage() {
     return next;
   };
 
-  const submit = async (e) => {
+  const handlePreSubmit = (e) => {
     e.preventDefault();
     setErroGeral('');
 
     const validationErrors = validar();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
-      setErroGeral('Por favor, corrija os campos indicados antes de continuar.');
+      setErroGeral('Por favor, preencha todos os campos obrigatórios corretamente antes de revisar.');
       return;
     }
 
+    // Abre a guia de revisão centralizada (Item 7)
+    setModalRevisao(true);
+  };
+
+  const confirmarESalvar = async () => {
+    setSaving(true);
+    setErroGeral('');
+
     const payload = {
-      escola_id: escolaId || 1, // Única escola cadastrada no sistema
+      escola_id: escolaId || 1,
       turma_id: Number(form.turma_id),
       nome: form.nome.trim(),
       matricula: form.matricula.trim(),
@@ -182,23 +232,33 @@ export default function StudentFormPage() {
       nome_mae: form.nome_mae.trim() || null,
       telefone_mae: form.telefone_mae.trim() || null,
       email_mae: form.email_mae.trim() || null,
-      tamanho_camiseta: form.tamanho_camiseta || null,
+      tamanho_camiseta: form.tamanhos_uniforme?.Camiseta || form.tamanho_camiseta || null,
+      tamanhos_uniforme: form.tamanhos_uniforme || {},
     };
 
-    setSaving(true);
     try {
       if (editing) {
         await updateStudent(id, payload);
       } else {
         await addStudent(payload);
       }
-      navigate('/alunos');
+      setModalRevisao(false);
+
+      // Se veio da tela de turmas (Item 17), retorna para a turma que estava visualizando
+      if (origemParam === 'turmas') {
+        navigate(`/turmas?turma_id=${form.turma_id}`);
+      } else {
+        navigate('/alunos');
+      }
     } catch (err) {
       setErroGeral(err.message || 'Não foi possível salvar o aluno.');
+      setModalRevisao(false);
     } finally {
       setSaving(false);
     }
   };
+
+  const turmaNomeSelecionada = turmas.find(t => String(t.id) === String(form.turma_id))?.nome || '—';
 
   return (
     <div className="page-enter">
@@ -207,7 +267,7 @@ export default function StudentFormPage() {
         subtitle={editing ? 'Atualize os dados cadastrais do aluno.' : 'Cadastre manualmente um novo aluno no sistema.'}
       />
       <Back />
-      <form onSubmit={submit}>
+      <form onSubmit={handlePreSubmit}>
         <Card className="p-6 sm:p-8">
           {erroGeral && (
             <p className="mb-5 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">
@@ -233,6 +293,7 @@ export default function StudentFormPage() {
               />
               <FormField
                 label="Data de nascimento"
+                required
                 type="date"
                 max={hoje}
                 value={form.data_nascimento}
@@ -262,9 +323,13 @@ export default function StudentFormPage() {
           </Section>
 
           <Section title="DADOS DOS RESPONSÁVEIS (PAI E MÃE)">
+            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+              O nome do pai e o nome da mãe são obrigatórios para a identificação do aluno.
+            </p>
             <div className="grid gap-5 md:grid-cols-3">
               <FormField
                 label="Nome do pai"
+                required
                 value={form.nome_pai}
                 onChange={e => change('nome_pai', e.target.value)}
                 error={errors.nome_pai}
@@ -287,6 +352,7 @@ export default function StudentFormPage() {
 
               <FormField
                 label="Nome da mãe"
+                required
                 value={form.nome_mae}
                 onChange={e => change('nome_mae', e.target.value)}
                 error={errors.nome_mae}
@@ -309,34 +375,116 @@ export default function StudentFormPage() {
             </div>
           </Section>
 
-          <Section title="UNIFORME ESCOLAR">
-            <div className="grid gap-5 md:grid-cols-2">
-              <Select
-                label="Tamanho da camiseta"
-                value={form.tamanho_camiseta}
-                onChange={e => change('tamanho_camiseta', e.target.value)}
-              >
-                <option value="">Selecione o tamanho</option>
-                {TAMANHOS_UNIFORME.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </Select>
+          <Section title="TAMANHOS DE UNIFORME DO ALUNO">
+            <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+              Selecione o tamanho do aluno para todos os itens de uniforme cadastrados na escola:
+            </p>
+            <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-3">
+              {tiposUniforme.map(tipo => (
+                <Select
+                  key={tipo}
+                  label={`Tamanho: ${tipo}`}
+                  value={form.tamanhos_uniforme?.[tipo] || ''}
+                  onChange={e => changeTamanhoUniforme(tipo, e.target.value)}
+                >
+                  <option value="">Selecione o tamanho</option>
+                  {TAMANHOS_UNIFORME.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </Select>
+              ))}
             </div>
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-3 text-xs text-slate-400">
               O status de entrega do uniforme é calculado automaticamente com base nas saídas registradas.
             </p>
           </Section>
 
           <div className="mt-8 flex justify-end gap-3 border-t border-slate-200 pt-7 dark:border-slate-800">
-            <Button variant="secondary" type="button" onClick={() => navigate('/alunos')}>
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => {
+                if (origemParam === 'turmas' && form.turma_id) {
+                  navigate(`/turmas?turma_id=${form.turma_id}`);
+                } else {
+                  navigate('/alunos');
+                }
+              }}
+            >
               Cancelar
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? 'Salvando...' : editing ? 'Salvar alterações' : 'Cadastrar aluno'}
+              {editing ? 'Revisar e salvar' : 'Revisar e cadastrar'}
             </Button>
           </div>
         </Card>
       </form>
+
+      {/* GUIA CENTRAL DE REVISÃO ANTES DE CONFIRMAR (Item 7) */}
+      <ReviewModal
+        isOpen={modalRevisao}
+        title={editing ? "Revisar Alterações do Aluno" : "Revisar Dados do Novo Aluno"}
+        subtitle="Confira atentamente os dados preenchidos antes de confirmar a gravação no sistema:"
+        confirmText={editing ? "Confirmar e Atualizar" : "Confirmar e Cadastrar"}
+        cancelText="Voltar e Corrigir"
+        loading={saving}
+        onConfirm={confirmarESalvar}
+        onClose={() => setModalRevisao(false)}
+      >
+        <div className="space-y-4 text-xs">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-800 dark:bg-slate-800/60">
+            <h4 className="font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider text-[10px] mb-2">
+              Dados do Aluno
+            </h4>
+            <div className="grid grid-cols-2 gap-2 text-slate-700 dark:text-slate-300">
+              <div><b>Nome:</b> {form.nome}</div>
+              <div><b>Matrícula:</b> {form.matricula}</div>
+              <div><b>Turma:</b> {turmaNomeSelecionada}</div>
+              <div><b>Nascimento:</b> {form.data_nascimento ? dateBR(form.data_nascimento) : '—'}</div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-800 dark:bg-slate-800/60">
+            <h4 className="font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider text-[10px] mb-2">
+              Responsáveis
+            </h4>
+            <div className="grid grid-cols-2 gap-3 text-slate-700 dark:text-slate-300">
+              <div>
+                <b>Pai:</b> {form.nome_pai}
+                <div className="text-[11px] text-slate-500">Tel: {form.telefone_pai || '—'}</div>
+                <div className="text-[11px] text-slate-500">Email: {form.email_pai || '—'}</div>
+              </div>
+              <div>
+                <b>Mãe:</b> {form.nome_mae}
+                <div className="text-[11px] text-slate-500">Tel: {form.telefone_mae || '—'}</div>
+                <div className="text-[11px] text-slate-500">Email: {form.email_mae || '—'}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-800 dark:bg-slate-800/60">
+            <h4 className="font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider text-[10px] mb-2">
+              Tamanhos de Uniforme
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {tiposUniforme.map(tipo => {
+                const tam = form.tamanhos_uniforme?.[tipo];
+                return (
+                  <span
+                    key={tipo}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    <span>{tipo}:</span>
+                    <b className={tam ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}>
+                      {tam || 'Não informado'}
+                    </b>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </ReviewModal>
     </div>
   );
 }

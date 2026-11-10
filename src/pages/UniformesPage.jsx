@@ -1,14 +1,31 @@
-import { AlertTriangle, PackageCheck, Plus, Trash2, Settings, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, PackageCheck, Plus, Trash2, Settings, Eye, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getEntradas, getEntregas, getEstoque, getTurmas, createItemUniforme, deleteItemUniforme } from '../api';
+import { getEntradas, getEntregas, getEstoque, getTurmas, createItemUniforme, deleteItemUniforme, getLoteDetalhes } from '../api';
 import { dateBR, pivotEstoque, TAMANHOS_UNIFORME } from '../data';
-import { Button, Card, Empty, Header, Select, Field } from '../components/UI';
+import { Button, Card, Empty, Header, Select, Field, ConfirmModal, AdminAuthModal } from '../components/UI';
+import { useApp } from '../App';
 
 const TABS = [
   { key: 'estoque', label: 'Estoque' },
   { key: 'entradas', label: 'Entradas' },
   { key: 'entregas', label: 'Histórico de Saídas' },
+];
+
+const MESES = [
+  { valor: '', rotulo: 'Todos os meses' },
+  { valor: '1', rotulo: 'Janeiro' },
+  { valor: '2', rotulo: 'Fevereiro' },
+  { valor: '3', rotulo: 'Março' },
+  { valor: '4', rotulo: 'Abril' },
+  { valor: '5', rotulo: 'Maio' },
+  { valor: '6', rotulo: 'Junho' },
+  { valor: '7', rotulo: 'Julho' },
+  { valor: '8', rotulo: 'Agosto' },
+  { valor: '9', rotulo: 'Setembro' },
+  { valor: '10', rotulo: 'Outubro' },
+  { valor: '11', rotulo: 'Novembro' },
+  { valor: '12', rotulo: 'Dezembro' },
 ];
 
 export default function UniformesPage() {
@@ -101,7 +118,6 @@ function AbaEstoque() {
   const alertas = itens.filter(i => i.alerta_saldo_baixo);
   const totalEstoque = itens.reduce((t, i) => t + i.quantidade_estoque, 0);
 
-  // Exibe somente tipos de uniformes que existem no sistema (Item 14)
   const tiposExistentes = [...new Set(itens.map(i => i.tipo))];
   const tamanhosExistentes = [...new Set(itens.map(i => i.tamanho))];
   const colunasTamanho = tamanhosExistentes.length ? TAMANHOS_UNIFORME.filter(t => tamanhosExistentes.includes(t)) : TAMANHOS_UNIFORME;
@@ -124,12 +140,13 @@ function AbaEstoque() {
         />
       </div>
 
+      {/* NOTIFICAÇÃO DE ESTOQUE BAIXO (Item 13: substituir saldo baixo por estoque baixo) */}
       {!!alertas.length && (
         <Card className="mb-6 border-amber-200 bg-amber-50 p-5 dark:border-amber-900/50 dark:bg-amber-950/20">
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 text-amber-500" size={20} />
             <div>
-              <h2 className="text-sm font-bold text-amber-800 dark:text-amber-300">Atenção: itens com saldo baixo</h2>
+              <h2 className="text-sm font-bold text-amber-800 dark:text-amber-300">Atenção: itens com estoque baixo</h2>
               <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                 {alertas.map(a => `${a.tipo} ${a.tamanho} (${a.quantidade_estoque} un.)`).join(' · ')}
               </p>
@@ -195,7 +212,7 @@ function AbaEstoque() {
         </div>
       </Card>
 
-      {/* Modal Novo Tipo de Uniforme (Item 14) */}
+      {/* Modal Novo Tipo de Uniforme */}
       {modalNovo && (
         <ModalNovoUniforme
           close={() => setModalNovo(false)}
@@ -206,7 +223,7 @@ function AbaEstoque() {
         />
       )}
 
-      {/* Modal Gerenciar / Excluir Uniformes (Item 14) */}
+      {/* Modal Gerenciar Uniformes e Tamanhos (Item 12) */}
       {modalGerenciar && (
         <ModalGerenciarUniformes
           itens={itens}
@@ -310,124 +327,323 @@ function ModalNovoUniforme({ close, onSuccess }) {
   );
 }
 
-// Modal para gerenciar / excluir uniformes que não se aplicam à escola (Item 14)
+// Modal para gerenciar uniformes e editar tamanhos (Item 12, 8, 18)
 function ModalGerenciarUniformes({ itens, close, onSuccess }) {
-  const [excluindoId, setExcluindoId] = useState(null);
+  const { currentUser } = useApp();
   const [erro, setErro] = useState('');
+  const [novoTamanhoMap, setNovoTamanhoMap] = useState({});
+  const [salvando, setSalvando] = useState(false);
+
+  // Estados de confirmação e RBAC
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+  const [adminAuthModal, setAdminAuthModal] = useState({ isOpen: false, actionDesc: '', onSuccess: null });
 
   const tipos = [...new Set(itens.map(i => i.tipo))];
 
-  const excluirPeca = async (tipo) => {
+  const executarAcaoSegura = (actionDesc, onPermitido) => {
+    if (currentUser?.role === 'padrao') {
+      setAdminAuthModal({
+        isOpen: true,
+        actionDesc,
+        onSuccess: onPermitido,
+      });
+    } else {
+      onPermitido();
+    }
+  };
+
+  const handleExcluirTamanho = (item) => {
+    if (item.quantidade_estoque > 0) {
+      return setErro(`Não é possível remover o tamanho ${item.tamanho}: há ${item.quantidade_estoque} unidade(s) em estoque.`);
+    }
+
+    executarAcaoSegura(`excluir o tamanho ${item.tamanho} de ${item.tipo}`, () => {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Remover Tamanho',
+        message: `Deseja realmente remover o tamanho "${item.tamanho}" do uniforme "${item.tipo}"?`,
+        onConfirm: async () => {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setSalvando(true);
+          setErro('');
+          try {
+            await deleteItemUniforme(item.id);
+            onSuccess();
+          } catch (err) {
+            setErro(err.message || 'Erro ao remover tamanho.');
+          } finally {
+            setSalvando(false);
+          }
+        },
+      });
+    });
+  };
+
+  const handleAdicionarTamanho = async (tipo) => {
+    const tamSelecionado = novoTamanhoMap[tipo];
+    if (!tamSelecionado) return setErro('Selecione um tamanho para adicionar.');
+
+    setSalvando(true);
+    setErro('');
+    try {
+      await createItemUniforme({ tipo, tamanho: tamSelecionado });
+      setNovoTamanhoMap(prev => ({ ...prev, [tipo]: '' }));
+      onSuccess();
+    } catch (err) {
+      setErro(err.message || 'Erro ao adicionar tamanho.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const handleExcluirTipoCompleto = (tipo) => {
     const itensDoTipo = itens.filter(i => i.tipo === tipo);
     const temEstoque = itensDoTipo.some(i => i.quantidade_estoque > 0);
     if (temEstoque) {
       return setErro(`Não é possível excluir "${tipo}": existem peças em estoque. Zere o estoque antes de remover.`);
     }
 
-    if (!window.confirm(`Tem certeza que deseja remover "${tipo}" dos uniformes da sua escola?`)) return;
-
-    setErro('');
-    setExcluindoId(tipo);
-    try {
-      for (const item of itensDoTipo) {
-        await deleteItemUniforme(item.id);
-      }
-      onSuccess();
-    } catch (err) {
-      setErro(err.message || 'Erro ao remover uniforme.');
-    } finally {
-      setExcluindoId(null);
-    }
+    executarAcaoSegura(`excluir o uniforme completo "${tipo}"`, () => {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Excluir Uniforme',
+        message: `Tem certeza que deseja remover o uniforme "${tipo}" e todos os seus tamanhos da escola?`,
+        onConfirm: async () => {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          setSalvando(true);
+          setErro('');
+          try {
+            for (const item of itensDoTipo) {
+              await deleteItemUniforme(item.id);
+            }
+            onSuccess();
+          } catch (err) {
+            setErro(err.message || 'Erro ao remover uniforme.');
+          } finally {
+            setSalvando(false);
+          }
+        },
+      });
+    });
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900 dark:border dark:border-slate-800">
-        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Gerenciar uniformes da escola</h3>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Remova peças que não se aplicam à sua escola (ex: boina, agasalho). Apenas peças com estoque zerado e sem histórico podem ser excluídas.
-        </p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900 dark:border dark:border-slate-800">
+        <div className="border-b border-slate-100 pb-3 dark:border-slate-800">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Gerenciar Uniformes e Tamanhos</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Adicione ou remova tamanhos configurados por uniforme. Tamanhos só podem ser excluídos se possuírem estoque zerado.
+          </p>
+        </div>
 
-        {erro && <p className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-600 dark:bg-red-950 dark:text-red-300">{erro}</p>}
+        {erro && (
+          <p className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-600 dark:bg-red-950 dark:text-red-300">
+            {erro}
+          </p>
+        )}
 
-        <div className="mt-4 max-h-72 overflow-y-auto space-y-2">
+        <div className="my-4 overflow-y-auto space-y-4 pr-1 flex-1">
           {tipos.map(tipo => {
             const itensDoTipo = itens.filter(i => i.tipo === tipo);
             const totalQtd = itensDoTipo.reduce((a, b) => a + b.quantidade_estoque, 0);
+            const tamanhosExistentes = itensDoTipo.map(i => i.tamanho);
+            const tamanhosRestantes = TAMANHOS_UNIFORME.filter(t => !tamanhosExistentes.includes(t));
+
             return (
               <div
                 key={tipo}
-                className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/60"
+                className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40"
               >
-                <div>
-                  <div className="text-sm font-semibold text-slate-900 dark:text-white">{tipo}</div>
-                  <div className="text-xs text-slate-400">
-                    {itensDoTipo.map(i => i.tamanho).join(', ')} · Estoque total: {totalQtd}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">{tipo}</h4>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      Estoque total: <strong>{totalQtd}</strong> un.
+                    </span>
+                  </div>
+                  <Button
+                    variant="danger"
+                    disabled={salvando || totalQtd > 0}
+                    onClick={() => handleExcluirTipoCompleto(tipo)}
+                    title={totalQtd > 0 ? 'Não pode excluir: possui estoque' : 'Excluir uniforme da escola'}
+                    className="h-8 px-2.5 text-xs"
+                  >
+                    <Trash2 size={13} /> Excluir tipo
+                  </Button>
+                </div>
+
+                {/* Lista de tamanhos configurados (Item 12) */}
+                <div className="mt-3">
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-2">
+                    Tamanhos ativos:
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {itensDoTipo.map(item => (
+                      <div
+                        key={item.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      >
+                        <span>{item.tamanho}</span>
+                        <span className="text-[10px] text-slate-400">({item.quantidade_estoque})</span>
+                        <button
+                          type="button"
+                          disabled={salvando || item.quantidade_estoque > 0}
+                          onClick={() => handleExcluirTamanho(item)}
+                          title={item.quantidade_estoque > 0 ? 'Estoque > 0 (não é possível remover)' : 'Remover tamanho'}
+                          className="ml-1 text-slate-400 hover:text-red-600 disabled:opacity-20 disabled:hover:text-slate-400"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  disabled={excluindoId === tipo || totalQtd > 0}
-                  onClick={() => excluirPeca(tipo)}
-                  title={totalQtd > 0 ? 'Não pode excluir: estoque maior que zero' : 'Excluir da escola'}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-30 dark:border-red-900/40 dark:hover:bg-red-950"
-                >
-                  <Trash2 size={14} />
-                </button>
+
+                {/* Adicionar novo tamanho a este uniforme (Item 12) */}
+                {tamanhosRestantes.length > 0 && (
+                  <div className="mt-3.5 flex items-center gap-2 pt-3 border-t border-slate-200/60 dark:border-slate-700/60">
+                    <select
+                      value={novoTamanhoMap[tipo] || ''}
+                      onChange={e => setNovoTamanhoMap(prev => ({ ...prev, [tipo]: e.target.value }))}
+                      className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    >
+                      <option value="">Adicionar tamanho...</option>
+                      {tamanhosRestantes.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="secondary"
+                      disabled={salvando || !novoTamanhoMap[tipo]}
+                      onClick={() => handleAdicionarTamanho(tipo)}
+                      className="h-8 px-3 text-xs"
+                    >
+                      <Plus size={13} /> Adicionar tamanho
+                    </Button>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
 
-        <div className="mt-6 flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
+        <div className="flex justify-end border-t border-slate-100 pt-4 dark:border-slate-800">
           <Button variant="secondary" onClick={close} className="h-9 px-4 text-xs">
             Fechar
           </Button>
         </div>
       </div>
+
+      {/* Confirmação in-app (Item 8) */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Autorização de administrador (Item 18) */}
+      <AdminAuthModal
+        isOpen={adminAuthModal.isOpen}
+        actionDesc={adminAuthModal.actionDesc}
+        onSuccess={adminAuthModal.onSuccess}
+        onClose={() => setAdminAuthModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
 
+// ABA ENTRADAS COM FILTROS DE ANO, MÊS, DIA E MODAL DE DETALHES (Item 9 e 16)
 function AbaEntradas() {
   const [lista, setLista] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
   const [q, setQ] = useState('');
   const [ano, setAno] = useState('');
+  const [mes, setMes] = useState('');
+  const [dia, setDia] = useState('');
+
+  // Detalhes do lote (Item 9)
+  const [loteDetalhes, setLoteDetalhes] = useState(null);
+  const [loadingDetalhes, setLoadingDetalhes] = useState(false);
 
   const carregar = () => {
     setLoading(true);
-    getEntradas({ q, ano })
+    getEntradas({ q, ano, mes, dia })
       .then(setLista)
       .catch(() => setErro('Não foi possível carregar as entradas. Verifique se a API está no ar.'))
       .finally(() => setLoading(false));
   };
-  useEffect(carregar, []); // eslint-disable-line
 
-  const anos = useMemo(() => [...new Set(lista.map(l => new Date(l.data_recebimento).getFullYear()))], [lista]);
+  useEffect(carregar, [ano, mes, dia]); // eslint-disable-line
+
+  const abrirDetalhes = async (loteId) => {
+    setLoadingDetalhes(true);
+    try {
+      const dados = await getLoteDetalhes(loteId);
+      setLoteDetalhes(dados);
+    } catch (err) {
+      setErro(err.message || 'Erro ao carregar detalhes do lote.');
+    } finally {
+      setLoadingDetalhes(false);
+    }
+  };
+
+  const anos = useMemo(() => {
+    const setAnos = new Set(lista.map(l => new Date(l.data_recebimento).getFullYear()));
+    setAnos.add(new Date().getFullYear());
+    return Array.from(setAnos).sort((a, b) => b - a);
+  }, [lista]);
 
   return (
     <>
       {erro && <p className="mb-5 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{erro}</p>}
+      
+      {/* FILTROS DE ENTRADAS (Item 16: ano, mês, dia, NF/responsável) */}
       <Card className="mb-6 p-5">
         <h2 className="mb-4 text-base font-bold text-slate-900 dark:text-white">Filtros de entradas</h2>
-        <div className="grid gap-4 md:grid-cols-[2fr_1fr_auto]">
-          <label>
-            <span className="mb-2 block text-xs font-semibold text-slate-900 dark:text-slate-200">Buscar</span>
-            <input
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="lg:col-span-2">
+            <Field
+              label="Buscar"
               value={q}
               onChange={e => setQ(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && carregar()}
               placeholder="Nota fiscal ou responsável..."
-              className="h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
-          </label>
-          <Select label="Período" value={ano} onChange={e => setAno(e.target.value)}>
+          </div>
+          <Select label="Ano" value={ano} onChange={e => setAno(e.target.value)}>
             <option value="">Todos os anos</option>
             {anos.map(a => <option key={a} value={a}>{a}</option>)}
           </Select>
-          <Button variant="secondary" className="self-end" onClick={carregar}>Filtrar</Button>
+          <Select label="Mês" value={mes} onChange={e => setMes(e.target.value)}>
+            {MESES.map(m => <option key={m.valor} value={m.valor}>{m.rotulo}</option>)}
+          </Select>
+          <div>
+            <Field
+              label="Dia"
+              type="number"
+              min="1"
+              max="31"
+              value={dia}
+              onChange={e => setDia(e.target.value)}
+              placeholder="Ex: 15"
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button
+            variant="secondary"
+            className="h-9 px-4 text-xs"
+            onClick={() => { setQ(''); setAno(''); setMes(''); setDia(''); }}
+          >
+            Limpar filtros
+          </Button>
+          <Button className="h-9 px-5 text-xs" onClick={carregar}>
+            Filtrar
+          </Button>
         </div>
       </Card>
 
@@ -437,10 +653,10 @@ function AbaEntradas() {
           <p className="text-xs text-slate-500 dark:text-slate-400">Registros de lotes de uniformes recebidos</p>
         </div>
         <div className="scrollbar-thin overflow-x-auto px-5 pb-5">
-          <table className="w-full min-w-[700px] border-collapse text-left text-xs">
+          <table className="w-full min-w-[750px] border-collapse text-left text-xs">
             <thead>
               <tr className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                {['Data', 'Nota fiscal', 'Escola', 'Responsável', 'Itens', 'Total'].map(h => (
+                {['Data', 'Nota fiscal', 'Escola', 'Responsável', 'Itens', 'Total', 'Ações'].map(h => (
                   <th key={h} className="px-4 py-3 font-medium">{h}</th>
                 ))}
               </tr>
@@ -454,14 +670,93 @@ function AbaEntradas() {
                   <td className="px-4 py-4">{l.responsavel}</td>
                   <td className="px-4 py-4">{l.itens} {l.itens === 1 ? 'item' : 'itens'}</td>
                   <td className="px-4 py-4 font-semibold text-blue-600 dark:text-blue-400">{l.total_pecas} peças</td>
+                  <td className="px-4 py-4">
+                    {/* BOTÃO PARA VER DETALHES DOS ITENS DO LOTE (Item 9) */}
+                    <button
+                      type="button"
+                      onClick={() => abrirDetalhes(l.id)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    >
+                      <Eye size={13} /> Ver itens
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!loading && !lista.length && <Empty text="Nenhuma entrada de uniforme registrada ainda." />}
+          {!loading && !lista.length && <Empty text="Nenhuma entrada de uniforme encontrada com os filtros selecionados." />}
           {loading && <div className="py-16 text-center text-sm text-slate-400">Carregando...</div>}
         </div>
       </Card>
+
+      {/* MODAL DE DETALHES DO LOTE (Item 9) */}
+      {loteDetalhes && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Itens Recebidos no Lote #{loteDetalhes.lote_id}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Data: {dateBR(loteDetalhes.data_recebimento)} · NF: {loteDetalhes.nota_fiscal || 'Sem NF'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLoteDetalhes(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="my-4 grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-800/60">
+              <div>
+                <span className="text-slate-400">Responsável:</span>
+                <p className="font-semibold text-slate-800 dark:text-white">{loteDetalhes.responsavel || '-'}</p>
+              </div>
+              <div>
+                <span className="text-slate-400">Escola:</span>
+                <p className="font-semibold text-slate-800 dark:text-white">{loteDetalhes.escola || '-'}</p>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  <tr>
+                    <th className="p-3">Item do Uniforme</th>
+                    <th className="p-3 text-center">Tamanho</th>
+                    <th className="p-3 text-right">Quantidade</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {loteDetalhes.itens.map((it, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                      <td className="p-3 font-medium text-slate-900 dark:text-white">{it.tipo}</td>
+                      <td className="p-3 text-center font-semibold text-slate-700 dark:text-slate-300">{it.tamanho}</td>
+                      <td className="p-3 text-right font-bold text-emerald-600 dark:text-emerald-400">+{it.quantidade_recebida || it.quantidade} un.</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-t border-slate-200 bg-slate-50 font-bold dark:border-slate-700 dark:bg-slate-800/80">
+                  <tr>
+                    <td colSpan={2} className="p-3 text-slate-700 dark:text-slate-300">Total do Lote:</td>
+                    <td className="p-3 text-right text-blue-600 dark:text-blue-400">{loteDetalhes.total_pecas} peças</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <Button variant="secondary" onClick={() => setLoteDetalhes(null)} className="h-9 px-4 text-xs">
+                Fechar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -1,6 +1,6 @@
-# Sistema de Controle de Uniformes Escolares (UNIFORME+)
+# Sistema de Controle de Uniformes Escolares (Uniforme Plus)
 
-Sistema completo para digitalizar e gerenciar o controle de uniformes distribuídos a escolas públicas: registrar a entrada de lotes de uniformes, cadastrar alunos com contato dos responsáveis, gerenciar turmas com sugestões inteligentes, registrar saídas para alunos com débito automático de estoque, gerenciar usuários com login seguro, alternar entre modos escuro/claro, emitir relatórios executivos mensais/por turma e auditar todas as ações em arquivo de log TXT.
+Sistema completo para digitalizar e gerenciar o controle de uniformes distribuídos a escolas públicas: registrar a entrada de lotes de uniformes, cadastrar alunos com contato dos responsáveis, gerenciar turmas com sugestões inteligentes, registrar saídas para alunos com débito automático de estoque, gerenciar usuários com login seguro, alternar entre modos escuro/claro, emitir relatórios executivos mensais/por turma, exportar relatórios em PDF/CSV e auditar todas as ações em arquivo de log TXT.
 
 Projeto acadêmico da disciplina **Prática e Desenvolvimento de Software**.
 
@@ -234,4 +234,7 @@ venv\Scripts\pytest.exe -v
 6. **`test_fluxo_entrada_e_saida`**: Valida a entrada de lotes e a subsequente saída de uniformes, confirmando o débito automático no estoque.
 7. **`test_relatorios_completo_e_csv`**: Valida a integridade do endpoint de relatório consolidado e a geração do arquivo CSV de prestação de contas.
 8. **`test_auditoria_logs`**: Garante que as ações dos usuários são devidamente gravadas e consultáveis no arquivo `sistema_logs.txt`.
+9. **`test_pdf_exportacao_e_dashboard_periodo`**: Valida a geração de relatórios oficiais em formato PDF com ReportLab e o painel Dashboard filtrado por período e mês.
+10. **`test_lote_detalhes_e_validacoes_entrada`**: Valida o bloqueio de data futura de recebimento, unicidade da nota fiscal e detalhamento dos itens recebidos no lote.
+11. **`test_autorizar_admin_e_rbac`**: Valida o endpoint de autenticação dinâmica de administrador para ações restritas e registro de auditoria.
 

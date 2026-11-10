@@ -198,3 +198,91 @@ def test_auditoria_logs(client):
     res_down = client.get("/logs/download")
     assert res_down.status_code == 200
     assert "text/plain" in res_down.headers["content-type"]
+
+
+def test_pdf_exportacao_e_dashboard_periodo(client, escola_com_usuario):
+    """Testa geração de relatório em PDF (Item 1) e Dashboard com filtros de período (Item 4 e 5)."""
+    # 1. Exportação em PDF
+    res_pdf = client.get("/relatorios/movimentacoes/pdf?tipo_movimentacao=todas")
+    assert res_pdf.status_code == 200
+    assert "application/pdf" in res_pdf.headers["content-type"]
+    assert res_pdf.content.startswith(b"%PDF")
+
+    # 2. Dashboard filtrado por ano e mês
+    res_dash = client.get("/relatorios/dashboard?ano=2026&mes=10")
+    assert res_dash.status_code == 200
+    dados = res_dash.json()
+    assert "ano" in dados and dados["ano"] == 2026
+    assert "mes" in dados and dados["mes"] == 10
+    assert "saidas_recentes" in dados
+
+
+def test_lote_detalhes_e_validacoes_entrada(client, escola_com_usuario):
+    """Testa validação de data futura, NF duplicada e detalhes dos itens do lote (Item 9 e 10)."""
+    escola_id = escola_com_usuario["escola"].id
+    usuario_id = escola_com_usuario["usuario"].id
+
+    client.post("/estoque/item", json={"tipo": "Calça", "tamanho": "M"})
+
+    # 1. Rejeita entrada com data futura
+    res_futura = client.post("/entradas", json={
+        "escola_id": escola_id,
+        "usuario_id": usuario_id,
+        "nota_fiscal": "NF-FUTURA",
+        "data_recebimento": "2099-01-01",
+        "itens": [{"tipo": "Calça", "tamanho": "M", "quantidade": 10}],
+    })
+    assert res_futura.status_code == 400
+    assert "posterior" in res_futura.json()["detail"].lower()
+
+    # 2. Entrada com sucesso e NF única
+    res_ok = client.post("/entradas", json={
+        "escola_id": escola_id,
+        "usuario_id": usuario_id,
+        "nota_fiscal": "NF-UNICA-999",
+        "data_recebimento": "2026-10-15",
+        "itens": [{"tipo": "Calça", "tamanho": "M", "quantidade": 10}],
+    })
+    assert res_ok.status_code == 201
+    lote_id = res_ok.json()["lote_id"]
+
+    # 3. Rejeita mesma NF
+    res_nf_dup = client.post("/entradas", json={
+        "escola_id": escola_id,
+        "usuario_id": usuario_id,
+        "nota_fiscal": "NF-UNICA-999",
+        "data_recebimento": "2026-10-15",
+        "itens": [{"tipo": "Calça", "tamanho": "M", "quantidade": 5}],
+    })
+    assert res_nf_dup.status_code == 400
+
+    # 4. Consulta detalhes do lote (Item 9)
+    res_det = client.get(f"/entradas/{lote_id}/detalhes")
+    assert res_det.status_code == 200
+    det = res_det.json()
+    assert det["id"] == lote_id
+    assert len(det["itens"]) == 1
+    assert det["itens"][0]["tipo"] == "Calça"
+    assert det["itens"][0]["tamanho"] == "M"
+    assert det["itens"][0]["quantidade"] == 10
+
+
+def test_autorizar_admin_e_rbac(client, escola_com_usuario):
+    """Testa endpoint de autorização imediata de administrador (Item 18)."""
+    # Autoriza com credencial do admin da fixture
+    res_auth = client.post("/auth/autorizar-admin", json={
+        "email": "admin@teste.com",
+        "senha": "admin123",
+        "acao": "excluir teste",
+    })
+    assert res_auth.status_code == 200
+    assert res_auth.json()["autorizado"] is True
+
+    # Falha com senha errada
+    res_fail = client.post("/auth/autorizar-admin", json={
+        "email": "admin@teste.com",
+        "senha": "senha-incorreta",
+        "acao": "excluir teste",
+    })
+    assert res_fail.status_code == 401
+

@@ -35,9 +35,10 @@ class Aluno(Base):
     telefone_mae = Column(String(20))
     email_mae = Column(String(255))
     tamanho_camiseta = Column(String(5))
+    tamanhos_uniforme = Column(String(500), nullable=True)  # Armazena JSON de tamanhos para todos os itens
 
     __table_args__ = (
-        CheckConstraint("tamanho_camiseta IN ('PP', 'P', 'M', 'G', 'GG', 'XG', '3G')", name="chk_aluno_tamanho"),
+        CheckConstraint("tamanho_camiseta IS NULL OR tamanho_camiseta IN ('PP', 'P', 'M', 'G', 'GG', 'XG', '3G')", name="chk_aluno_tamanho"),
     )
 
 class Usuario(Base):
@@ -47,6 +48,7 @@ class Usuario(Base):
     nome = Column(String(255), nullable=False)
     email = Column(String(255), unique=True, nullable=False)
     senha = Column(String(255), nullable=False)
+    role = Column(String(50), default="admin", server_default="admin")  # 'admin' ou 'padrao'
 
 class ItemUniforme(Base):
     __tablename__ = "item_uniforme"

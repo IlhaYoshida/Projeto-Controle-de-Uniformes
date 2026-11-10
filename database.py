@@ -34,6 +34,48 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Base para criarmos os modelos
 Base = declarative_base()
 
+
+def aplicar_migracoes(target_engine):
+    """
+    Aplica migrações incrementais nas tabelas existentes de forma idempotente,
+    garantindo compatibilidade com bancos legados (PostgreSQL, SQLite, etc.)
+    sem gerar erros de 'UndefinedColumn'.
+    """
+    from sqlalchemy import inspect, text
+    try:
+        inspector = inspect(target_engine)
+        tables = inspector.get_table_names()
+        with target_engine.begin() as conn:
+            # 1. Tabela usuarios
+            if "usuarios" in tables:
+                cols = [c["name"] for c in inspector.get_columns("usuarios")]
+                if "role" not in cols:
+                    conn.execute(text("ALTER TABLE usuarios ADD COLUMN role VARCHAR(50) DEFAULT 'admin'"))
+                    conn.execute(text("UPDATE usuarios SET role = 'admin' WHERE role IS NULL"))
+
+            # 2. Tabela alunos
+            if "alunos" in tables:
+                cols = [c["name"] for c in inspector.get_columns("alunos")]
+                if "tamanhos_uniforme" not in cols:
+                    conn.execute(text("ALTER TABLE alunos ADD COLUMN tamanhos_uniforme VARCHAR(500)"))
+                if "nome_pai" not in cols:
+                    conn.execute(text("ALTER TABLE alunos ADD COLUMN nome_pai VARCHAR(255)"))
+                if "nome_mae" not in cols:
+                    conn.execute(text("ALTER TABLE alunos ADD COLUMN nome_mae VARCHAR(255)"))
+                if "data_nascimento" not in cols:
+                    conn.execute(text("ALTER TABLE alunos ADD COLUMN data_nascimento DATE"))
+                if "telefone_pai" not in cols:
+                    conn.execute(text("ALTER TABLE alunos ADD COLUMN telefone_pai VARCHAR(20)"))
+                if "email_pai" not in cols:
+                    conn.execute(text("ALTER TABLE alunos ADD COLUMN email_pai VARCHAR(255)"))
+                if "telefone_mae" not in cols:
+                    conn.execute(text("ALTER TABLE alunos ADD COLUMN telefone_mae VARCHAR(20)"))
+                if "email_mae" not in cols:
+                    conn.execute(text("ALTER TABLE alunos ADD COLUMN email_mae VARCHAR(255)"))
+    except Exception as e:
+        print(f"[MIGRAÇÃO] Aviso ao verificar/aplicar migrações: {e}")
+
+
 # Dependência para injetar a sessão do banco nas rotas
 def get_db():
     db = SessionLocal()

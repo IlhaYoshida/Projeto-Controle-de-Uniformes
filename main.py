@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import models
-from database import engine
+from database import engine, aplicar_migracoes
 
 from routers import escolas, turmas, usuarios, alunos, entradas, entregas, estoque, relatorios, auth, logs
 
 # Garante que as tabelas sejam criadas no banco de dados, caso não existam
 models.Base.metadata.create_all(bind=engine)
+aplicar_migracoes(engine)
 
 app = FastAPI(
     title="API Controle de Uniformes",
