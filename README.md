@@ -169,28 +169,49 @@ Caso prefira configurar os dados da sua escola e registrar seu próprio usuário
 
 ## Telas do Sistema (Frontend)
 
-1. **Login & Configuração Inicial** (`/`):
-   Autenticação obrigatória com credenciais criptografadas e assistente para primeiro acesso da escola.
-2. **Dashboard** (`/dashboard`):
-   Indicadores executivos, total de alunos beneficiados, peças distribuídas, gráfico mensal de entregas e matriz de estoque.
-3. **Alunos** (`/alunos`):
-   Pesquisa e filtros rápidos, formulário com validação contínua (sem perda de foco), contatos do pai e da mãe e histórico de saídas.
-4. **Turmas** (`/turmas`):
-   CRUD de classes com motor de **sugestões inteligentes**, gráficos interativos de entregas (realizadas vs pendentes) e distribuição de tamanhos de uniformes por turma.
-5. **Uniformes** (`/uniformes`):
-   Matriz com apenas uniformes existentes na escola, histórico de entradas de lotes, histórico de saídas e modais para criar novas peças ou remover peças não aplicáveis.
-6. **Entrada de Estoque** (`/uniformes/entrada`):
-   Registro de notas fiscais e lotes com múltiplos itens.
-7. **Registrar Saída** (`/uniformes/entrega`):
-   Metodologia de "Adicionar outro item", exibindo **estritamente uniformes com saldo positivo em estoque**.
-8. **Relatórios** (`/relatorios`):
-   Visão consolidada por turma com nomes corretos, relatório mensal de fluxo líquido e exportação em CSV.
-9. **Usuários** (`/usuarios`):
-   Gestão de credenciais da secretaria e identificação fixa do usuário conectado na barra lateral.
-10. **Logs do Sistema** (`/logs`):
-    Auditoria em tempo real de visualizações, edições e exclusões gravadas no arquivo texto com download de `sistema_logs.txt`.
-11. **Modo Escuro / Claro**:
-    Botão localizado na base da barra lateral com persistência da preferência do usuário.
+### Dashboard (`/dashboard`)
+
+Visão geral dos indicadores de alunos cadastrados, beneficiados, peças distribuídas e estoque disponível. Apresenta gráficos de acompanhamento anual, registros recentes de saída e matriz de estoque por peça e tamanho, com filtros por ano e mês.
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Alunos (`/alunos`)
+
+Cadastro, consulta, edição e importação de alunos, com pesquisa por nome ou matrícula, filtros por turma, idade, tamanho e situação de recebimento. Inclui validação de dados, contatos dos responsáveis e histórico de entregas.
+
+![Gerenciamento de alunos](docs/screenshots/alunos.png)
+
+### Turmas (`/turmas`)
+
+Gerenciamento de turmas escolares com sugestões automáticas de novas classes, indicadores de entregas realizadas e pendentes, distribuição de tamanhos de camisetas e listagem de alunos matriculados.
+
+![Gerenciamento de turmas](docs/screenshots/turmas.png)
+
+### Uniformes (`/uniformes`)
+
+Controle de estoque por peça e tamanho, indicadores de entradas e saídas, alertas de estoque baixo, histórico de movimentações e gerenciamento de tipos de uniformes personalizados.
+
+![Controle de estoque de uniformes](docs/screenshots/uniformes.png)
+
+### Relatórios (`/relatorios`)
+
+Visão consolidada da distribuição de uniformes, com indicadores de cobertura, acompanhamento individual por turma, relatório mensal, filtros por período e exportação em PDF e CSV.
+
+![Relatórios de distribuição](docs/screenshots/relatorio.png)
+
+### Usuários (`/usuarios`)
+
+Gerenciamento dos profissionais com acesso ao sistema, permitindo cadastrar, editar e excluir usuários, consultar níveis de permissão e status de acesso, além de identificar o usuário conectado.
+
+![Gerenciamento de usuários](docs/screenshots/usuarios.png)
+
+### Demais funcionalidades
+
+- **Login e Configuração Inicial (`/`)**: autenticação obrigatória com senhas protegidas por hash e assistente de configuração inicial da escola.
+- **Entrada de Estoque (`/uniformes/entrada`)**: registro de notas fiscais e lotes com múltiplos itens.
+- **Registrar Saída (`/uniformes/entrega`)**: registro de entregas com múltiplos itens, exibindo apenas uniformes com saldo positivo em estoque e realizando o débito automático.
+- **Logs do Sistema (`/logs`)**: auditoria das operações e download do arquivo `sistema_logs.txt`.
+- **Modo Escuro / Claro**: alternância de tema pela barra lateral, com persistência da preferência do usuário.
 
 ---
 
